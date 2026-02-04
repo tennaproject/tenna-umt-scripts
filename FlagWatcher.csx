@@ -17,6 +17,13 @@ if (Data.Code.ByName("gml_Object_obj_time_Draw_64") is not UndertaleCode drawCod
 }
 
 string checkCreate = GetDecompiledText(createCode);
+
+if (!checkCreate.Contains("_tenna_core_enabled"))
+{
+  ScriptError("Tenna Core is required!\n\nPlease install Core.csx first.");
+  return;
+}
+
 if (checkCreate.Contains("_tenna_fw_enabled"))
 {
   ScriptError("Flag Watcher is already installed!");
@@ -29,24 +36,28 @@ UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 };
 
 string createInit = @"
-_tenna_fw_max_log = 20;
+_tenna_fw_max_log = 30;
 _tenna_fw_enabled = true;
+_tenna_fw_visible = true;
 for (var _tenna_fw_i = 0; _tenna_fw_i < 2000; _tenna_fw_i++)
     _tenna_fw_shadow[_tenna_fw_i] = global.flag[_tenna_fw_i];
 
 for (var _tenna_fw_i = 0; _tenna_fw_i < _tenna_fw_max_log; _tenna_fw_i++)
+{
     _tenna_fw_log[_tenna_fw_i] = """";
-
-_tenna_fw_log_count = 0;
-_tenna_fw_start_time = current_time;
+    _tenna_fw_alpha[_tenna_fw_i] = 0;
+}
 ";
 
 string stepCheck = @"
+if (keyboard_check_pressed(ord(""2"")) && keyboard_check(vk_alt))
+    _tenna_fw_visible = !_tenna_fw_visible;
+
 if (_tenna_fw_enabled)
 {
     for (var _tenna_fw_i = 0; _tenna_fw_i < 2000; _tenna_fw_i++)
     {
-        if (_tenna_fw_i == 33)
+        if (_tenna_fw_i == 21 || _tenna_fw_i == 33)
             continue;
         
         if (global.flag[_tenna_fw_i] != _tenna_fw_shadow[_tenna_fw_i])
@@ -55,44 +66,49 @@ if (_tenna_fw_enabled)
             var _tenna_fw_new = global.flag[_tenna_fw_i];
             _tenna_fw_shadow[_tenna_fw_i] = _tenna_fw_new;
             
-            var _tenna_fw_elapsed = (current_time - _tenna_fw_start_time) / 1000;
-            var _tenna_fw_mins = floor(_tenna_fw_elapsed / 60);
-            var _tenna_fw_secs = floor(_tenna_fw_elapsed) mod 60;
-            var _tenna_fw_ts = string(_tenna_fw_mins) + "":"" + ((_tenna_fw_secs < 10) ? ""0"" : """") + string(_tenna_fw_secs);
-            
             for (var _tenna_fw_j = _tenna_fw_max_log - 1; _tenna_fw_j > 0; _tenna_fw_j--)
+            {
                 _tenna_fw_log[_tenna_fw_j] = _tenna_fw_log[_tenna_fw_j - 1];
+                _tenna_fw_alpha[_tenna_fw_j] = _tenna_fw_alpha[_tenna_fw_j - 1];
+            }
             
-            _tenna_fw_log[0] = ""["" + _tenna_fw_ts + ""] Flag["" + string(_tenna_fw_i) + ""]: "" + string(_tenna_fw_old) + "" -> "" + string(_tenna_fw_new);
-            _tenna_fw_log_count++;
+            _tenna_fw_log[0] = ""Flag["" + string(_tenna_fw_i) + ""]: "" + string(_tenna_fw_old) + "" -> "" + string(_tenna_fw_new);
+            _tenna_fw_alpha[0] = 1;
+            
+            scr_tenna_log(""FlagWatcher"", ""["" + string(_tenna_fw_i) + ""]: "" + string(_tenna_fw_old) + "" -> "" + string(_tenna_fw_new));
         }
+    }
+    
+    for (var _tenna_fw_i = 0; _tenna_fw_i < _tenna_fw_max_log; _tenna_fw_i++)
+    {
+        if (_tenna_fw_alpha[_tenna_fw_i] > 0)
+            _tenna_fw_alpha[_tenna_fw_i] -= 0.003;
     }
 }
 ";
 
-bool hasScr_debug = Data.Scripts.ByName("scr_debug") is not null;
-string debugCheck = hasScr_debug ? "scr_debug()" : "(variable_global_exists(\"debug\") && global.debug)";
-
-string drawDisplay = $@"
-if ({debugCheck})
-{{
+string drawDisplay = @"
+if (_tenna_fw_visible)
+{
     draw_set_font(fnt_main);
     draw_set_halign(fa_right);
     var _tenna_fw_yoff = 8;
     for (var _tenna_fw_i = 0; _tenna_fw_i < _tenna_fw_max_log; _tenna_fw_i++)
-    {{
-        if (_tenna_fw_log[_tenna_fw_i] != """")
-        {{
+    {
+        if (_tenna_fw_log[_tenna_fw_i] != """" && _tenna_fw_alpha[_tenna_fw_i] > 0)
+        {
+            draw_set_alpha(_tenna_fw_alpha[_tenna_fw_i]);
             draw_set_color(c_black);
             draw_text(633, _tenna_fw_yoff + 1, _tenna_fw_log[_tenna_fw_i]);
             draw_set_color(c_yellow);
             draw_text(632, _tenna_fw_yoff, _tenna_fw_log[_tenna_fw_i]);
             _tenna_fw_yoff += 14;
-        }}
-    }}
+        }
+    }
+    draw_set_alpha(1);
     draw_set_halign(fa_left);
     draw_set_color(c_white);
-}}
+}
 ";
 
 try
@@ -102,7 +118,7 @@ try
   importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
   
   importGroup.Import();
-  ScriptMessage("Flag Watcher installed!\n\nEnable debug mode to see flag changes.");
+  ScriptMessage("Flag Watcher installed!\n\nAlt+2 to toggle display.");
 }
 catch (Exception ex)
 {
