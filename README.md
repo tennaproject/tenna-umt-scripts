@@ -5,14 +5,14 @@ A collection of [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleM
 ## Installation
 
 1. Download or clone this repository
-2. Copy the `Scripts` folder to your UndertaleModTool directory
+2. Copy the `tenna-umt-scripts` folder to your UndertaleModTool `Scripts` folder
 3. Open UndertaleModTool
 
 ## Usage
 
 1. Open UndertaleModTool and load your `data.win`
 2. Run `UTDR Scripts/Debug.csx` first to enable debug mode (it's required for other scripts to work)
-3. Run any other scripts you need from `Tenna Project/`
+3. Run any other scripts you need from `tenna-umt-scripts/`
 4. Save your modified `data.win`
 5. Launch the game
 
