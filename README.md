@@ -5,7 +5,7 @@ A collection of [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleM
 ## Scripts
 
 ### Core.csx
-Base script required by others scripts to work. Shows version and elapsed time in bottom-right corner. Creates a log file (`tenna-YYYY-MM-DD_HH-MM-SS.txt`) for tracking changes. 
+Base script required by others scripts to work. Shows version and elapsed time in bottom-right corner. Creates a log file (`tenna/logs/tenna-YYYY-MM-DD_HH-MM-SS.txt`) for tracking changes.
 
 **Hotkey:** Alt+1 to toggle display
 

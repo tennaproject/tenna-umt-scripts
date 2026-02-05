@@ -41,7 +41,7 @@ var _ts = string(current_year) + ""-""
     + string_format(current_second, 2, 0);
 _ts = string_replace_all(_ts, "" "", ""0"");
 
-global._tenna_core_filename = ""tenna-"" + _ts + "".txt"";
+global._tenna_core_filename = ""tenna/logs/tenna-"" + _ts + "".txt"";
 global._tenna_core_ts = _ts;
 
 global._tenna_core_ver = """";
@@ -49,6 +49,9 @@ if (variable_global_exists(""versionno""))
     global._tenna_core_ver = string(global.versionno);
 if (variable_global_exists(""version""))
     global._tenna_core_ver = string(global.version);
+
+directory_create(""tenna"");
+directory_create(""tenna/logs"");
 
 var _f = file_text_open_write(global._tenna_core_filename);
 file_text_write_string(_f, ""Tenna Core "" + global._tenna_core_ver + "" "" + _ts);
