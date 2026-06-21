@@ -20,15 +20,11 @@ string checkCreate = GetDecompiledText(createCode);
 
 if (!checkCreate.Contains("_tenna_core_enabled"))
 {
-  ScriptError("Tenna Core is required!\n\nPlease install Core.csx first.");
+  ScriptError("Tenna Core is required!\n\nPlease install GameCore.csx first.");
   return;
 }
 
-if (checkCreate.Contains("_tenna_pw_enabled"))
-{
-  ScriptError("Plot Watcher is already installed!");
-  return;
-}
+bool plotWatcherAlreadyInstalled = checkCreate.Contains("_tenna_pw_enabled");
 
 UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 {
@@ -95,12 +91,16 @@ if (_tenna_pw_visible)
 
 try
 {
-  importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
-  importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
-  importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
+  if (!plotWatcherAlreadyInstalled)
+  {
+    importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
+    importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
+    importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
+  }
   
   importGroup.Import();
-  ScriptMessage("Plot Watcher installed!\n\nAlt+3 to toggle display.");
+  if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
+    ScriptMessage("Plot Watcher " + (plotWatcherAlreadyInstalled ? "updated" : "installed") + "!\n\nAlt+3 to toggle display.");
 }
 catch (Exception ex)
 {

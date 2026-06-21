@@ -20,15 +20,11 @@ string checkCreate = GetDecompiledText(createCode);
 
 if (!checkCreate.Contains("_tenna_core_enabled"))
 {
-  ScriptError("Tenna Core is required!\n\nPlease install Core.csx first.");
+  ScriptError("Tenna Core is required!\n\nPlease install GameCore.csx first.");
   return;
 }
 
-if (checkCreate.Contains("_tenna_fw_enabled"))
-{
-  ScriptError("Flag Watcher is already installed!");
-  return;
-}
+bool flagWatcherAlreadyInstalled = checkCreate.Contains("_tenna_fw_enabled");
 
 UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 {
@@ -39,6 +35,9 @@ string createInit = @"
 _tenna_fw_max_log = 30;
 _tenna_fw_enabled = true;
 _tenna_fw_visible = true;
+directory_create(""tenna"");
+directory_create(""tenna/flag-logs"");
+global._tenna_fw_export_filename = ""tenna/flag-logs/flags-"" + global._tenna_core_ts + "".jsonl"";
 for (var _tenna_fw_i = 0; _tenna_fw_i < 2000; _tenna_fw_i++)
     _tenna_fw_shadow[_tenna_fw_i] = global.flag[_tenna_fw_i];
 
@@ -59,26 +58,49 @@ if (_tenna_fw_enabled)
     {
         if (_tenna_fw_i == 21 || _tenna_fw_i == 33)
             continue;
-        
+
         if (global.flag[_tenna_fw_i] != _tenna_fw_shadow[_tenna_fw_i])
         {
             var _tenna_fw_old = _tenna_fw_shadow[_tenna_fw_i];
             var _tenna_fw_new = global.flag[_tenna_fw_i];
             _tenna_fw_shadow[_tenna_fw_i] = _tenna_fw_new;
-            
+
             for (var _tenna_fw_j = _tenna_fw_max_log - 1; _tenna_fw_j > 0; _tenna_fw_j--)
             {
                 _tenna_fw_log[_tenna_fw_j] = _tenna_fw_log[_tenna_fw_j - 1];
                 _tenna_fw_alpha[_tenna_fw_j] = _tenna_fw_alpha[_tenna_fw_j - 1];
             }
-            
+
             _tenna_fw_log[0] = ""Flag["" + string(_tenna_fw_i) + ""]: "" + string(_tenna_fw_old) + "" -> "" + string(_tenna_fw_new);
             _tenna_fw_alpha[0] = 1;
-            
-            scr_tenna_log(""FlagWatcher"", ""["" + string(_tenna_fw_i) + ""]: "" + string(_tenna_fw_old) + "" -> "" + string(_tenna_fw_new));
+
+            var _tenna_fw_room = -1;
+            if (variable_global_exists(""currentroom""))
+                _tenna_fw_room = global.currentroom;
+            var _tenna_fw_plot = -1;
+            if (variable_global_exists(""plot""))
+                _tenna_fw_plot = global.plot;
+            var _tenna_fw_chapter = -1;
+            if (variable_global_exists(""chapter""))
+                _tenna_fw_chapter = global.chapter;
+
+            var _tenna_fw_elapsed = (current_time - global._tenna_core_start_time) / 1000;
+            var _tenna_fw_q = chr(34);
+            var _tenna_fw_file = file_text_open_append(global._tenna_fw_export_filename);
+            file_text_write_string(_tenna_fw_file, ""{"" + _tenna_fw_q + ""elapsedSeconds"" + _tenna_fw_q + "":"" + string(_tenna_fw_elapsed));
+            file_text_write_string(_tenna_fw_file, "","" + _tenna_fw_q + ""flagId"" + _tenna_fw_q + "":"" + string(_tenna_fw_i));
+            file_text_write_string(_tenna_fw_file, "","" + _tenna_fw_q + ""oldValue"" + _tenna_fw_q + "":"" + string(_tenna_fw_old));
+            file_text_write_string(_tenna_fw_file, "","" + _tenna_fw_q + ""newValue"" + _tenna_fw_q + "":"" + string(_tenna_fw_new));
+            file_text_write_string(_tenna_fw_file, "","" + _tenna_fw_q + ""chapter"" + _tenna_fw_q + "":"" + string(_tenna_fw_chapter));
+            file_text_write_string(_tenna_fw_file, "","" + _tenna_fw_q + ""room"" + _tenna_fw_q + "":"" + string(_tenna_fw_room));
+            file_text_write_string(_tenna_fw_file, "","" + _tenna_fw_q + ""plot"" + _tenna_fw_q + "":"" + string(_tenna_fw_plot) + ""}"");
+            file_text_writeln(_tenna_fw_file);
+            file_text_close(_tenna_fw_file);
+
+            scr_tenna_log(""FlagWatcher"", ""["" + string(_tenna_fw_i) + ""]: "" + string(_tenna_fw_old) + "" -> "" + string(_tenna_fw_new) + "" room="" + string(_tenna_fw_room) + "" plot="" + string(_tenna_fw_plot));
         }
     }
-    
+
     for (var _tenna_fw_i = 0; _tenna_fw_i < _tenna_fw_max_log; _tenna_fw_i++)
     {
         if (_tenna_fw_alpha[_tenna_fw_i] > 0)
@@ -113,12 +135,16 @@ if (_tenna_fw_visible)
 
 try
 {
-  importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
-  importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
-  importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
-  
+  if (!flagWatcherAlreadyInstalled)
+  {
+    importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
+    importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
+    importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
+  }
+
   importGroup.Import();
-  ScriptMessage("Flag Watcher installed!\n\nAlt+2 to toggle display.");
+  if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
+    ScriptMessage("Flag Watcher " + (flagWatcherAlreadyInstalled ? "updated" : "installed") + "!\n\nAlt+2 to toggle display.\nFlag changes export to tenna/flag-logs/.");
 }
 catch (Exception ex)
 {

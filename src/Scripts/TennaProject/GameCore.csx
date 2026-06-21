@@ -17,11 +17,7 @@ if (Data.Code.ByName("gml_Object_obj_time_Draw_64") is not UndertaleCode drawCod
 }
 
 string checkCreate = GetDecompiledText(createCode);
-if (checkCreate.Contains("_tenna_core_enabled"))
-{
-  ScriptError("Tenna Core is already installed!");
-  return;
-}
+bool coreAlreadyInstalled = checkCreate.Contains("_tenna_core_enabled");
 
 UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 {
@@ -87,15 +83,21 @@ if (global._tenna_core_visible)
 ";
 
 var logFuncName = "scr_tenna_log";
-if (Data.Scripts.ByName(logFuncName) is null)
+UndertaleCode logCode;
+if (Data.Scripts.ByName(logFuncName)?.Code is UndertaleCode existingLogCode)
+{
+  logCode = existingLogCode;
+}
+else
 {
   var logCodeName = "gml_Script_" + logFuncName;
-  var logCode = new UndertaleCode { Name = Data.Strings.MakeString(logCodeName) };
+  logCode = new UndertaleCode { Name = Data.Strings.MakeString(logCodeName) };
   Data.Code.Add(logCode);
   var logScript = new UndertaleScript { Name = Data.Strings.MakeString(logFuncName), Code = logCode };
   Data.Scripts.Add(logScript);
-  
-  string logFuncBody = @"
+}
+
+string logFuncBody = @"
 var _prefix = argument0;
 var _msg = argument1;
 
@@ -112,17 +114,20 @@ file_text_write_string(_f, ""["" + _tenna_ts + ""] ["" + _prefix + ""] "" + _msg
 file_text_writeln(_f);
 file_text_close(_f);
 ";
-  importGroup.QueueReplace(logCode, logFuncBody);
-}
+importGroup.QueueReplace(logCode, logFuncBody);
 
 try
 {
-  importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
-  importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
-  importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
+  if (!coreAlreadyInstalled)
+  {
+    importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
+    importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
+    importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
+  }
   
   importGroup.Import();
-  ScriptMessage("Tenna Core installed!\n\nAlt+1 to toggle display.");
+  if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
+    ScriptMessage("Tenna Core " + (coreAlreadyInstalled ? "updated" : "installed") + "!\n\nAlt+1 to toggle display.");
 }
 catch (Exception ex)
 {

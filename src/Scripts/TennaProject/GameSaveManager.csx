@@ -20,15 +20,11 @@ string checkCreate = GetDecompiledText(createCode);
 
 if (!checkCreate.Contains("_tenna_core_enabled"))
 {
-  ScriptError("Tenna Core is required!\n\nPlease install Core.csx first.");
+  ScriptError("Tenna Core is required!\n\nPlease install GameCore.csx first.");
   return;
 }
 
-if (checkCreate.Contains("_tenna_sm_enabled"))
-{
-  ScriptError("Save Manager is already installed!");
-  return;
-}
+bool saveManagerAlreadyInstalled = checkCreate.Contains("_tenna_sm_enabled");
 
 UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 {
@@ -105,7 +101,7 @@ if (global._tenna_sm_open)
             if (_k != """")
             {
                 var _c = ord(_k);
-                if ((_c >= 48 && _c <= 57) || (_c >= 65 && _c <= 90) || (_c >= 97 && _c <= 122) || _c == 45 || _c == 95 || _c == 32)
+                if ((_c >= 48 && _c <= 57) || (_c >= 65 && _c <= 90) || (_c >= 97 && _c <= 122) || _c == 45 || _c == 95)
                     global._tenna_sm_input += _k;
             }
             keyboard_lastchar = """";
@@ -332,19 +328,54 @@ if (global._tenna_sm_msg_timer > 0)
 }
 ";
 
-var refreshFunctionName = "scr_tenna_sm_refresh";
-if (Data.Scripts.ByName(refreshFunctionName) is null)
+var saveDirFunctionName = "scr_tenna_sm_save_dir";
+UndertaleCode saveDirCode;
+if (Data.Scripts.ByName(saveDirFunctionName)?.Code is UndertaleCode existingSaveDirCode)
 {
-  var codeEntry = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + refreshFunctionName) };
-  Data.Code.Add(codeEntry);
-  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(refreshFunctionName), Code = codeEntry };
+  saveDirCode = existingSaveDirCode;
+}
+else
+{
+  saveDirCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + saveDirFunctionName) };
+  Data.Code.Add(saveDirCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(saveDirFunctionName), Code = saveDirCode };
   Data.Scripts.Add(scriptEntry);
-  
-  string refreshBody = @"
+}
+
+string saveDirBody = @"
+directory_create(""tenna"");
+directory_create(""tenna/saves"");
+
+var _chapter = 0;
+if (variable_global_exists(""chapter""))
+    _chapter = global.chapter;
+
+var _dir = ""tenna/saves/chapter"" + string(_chapter);
+directory_create(_dir);
+return _dir;
+";
+importGroup.QueueReplace(saveDirCode, saveDirBody);
+
+var refreshFunctionName = "scr_tenna_sm_refresh";
+UndertaleCode refreshCode;
+if (Data.Scripts.ByName(refreshFunctionName)?.Code is UndertaleCode existingRefreshCode)
+{
+  refreshCode = existingRefreshCode;
+}
+else
+{
+  refreshCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + refreshFunctionName) };
+  Data.Code.Add(refreshCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(refreshFunctionName), Code = refreshCode };
+  Data.Scripts.Add(scriptEntry);
+}
+
+string refreshBody = @"
 global._tenna_sm_count = 0;
 global._tenna_sm_saves[0] = """";
 
-var _search = file_find_first(""tenna/saves/*"", 0);
+var _save_dir = scr_tenna_sm_save_dir();
+var _search = file_find_first(_save_dir + ""/*"", 0);
 while (_search != """")
 {
     if (string_pos(""."", _search) == 0 && _search != """")
@@ -369,22 +400,167 @@ for (var _i = 0; _i < global._tenna_sm_count - 1; _i++)
     }
 }
 ";
-  importGroup.QueueReplace(codeEntry, refreshBody);
+importGroup.QueueReplace(refreshCode, refreshBody);
+
+var writeRealFunctionName = "scr_tenna_sm_write_real";
+UndertaleCode writeRealCode;
+if (Data.Scripts.ByName(writeRealFunctionName)?.Code is UndertaleCode existingWriteRealCode)
+{
+  writeRealCode = existingWriteRealCode;
+}
+else
+{
+  writeRealCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + writeRealFunctionName) };
+  Data.Code.Add(writeRealCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(writeRealFunctionName), Code = writeRealCode };
+  Data.Scripts.Add(scriptEntry);
 }
 
-var saveFunctionName = "scr_tenna_sm_save";
-if (Data.Scripts.ByName(saveFunctionName) is null)
+string writeRealBody = @"
+var _file = argument0;
+var _value = argument1;
+
+if (is_string(_value))
 {
-  var codeEntry = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + saveFunctionName) };
-  Data.Code.Add(codeEntry);
-  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(saveFunctionName), Code = codeEntry };
+    var _ok = string_length(_value) > 0;
+    for (var _i = 1; _i <= string_length(_value); _i++)
+    {
+        var _c = ord(string_char_at(_value, _i));
+        if (_i == 1 && _c == 45)
+            continue;
+        if (_c < 48 || _c > 57)
+        {
+            _ok = false;
+            break;
+        }
+    }
+
+    if (_ok)
+        file_text_write_real(_file, real(_value));
+    else
+        file_text_write_real(_file, 0);
+}
+else
+{
+    file_text_write_real(_file, _value);
+}
+";
+importGroup.QueueReplace(writeRealCode, writeRealBody);
+
+var getGlobal2dFunctionName = "scr_tenna_sm_get_global_2d";
+UndertaleCode getGlobal2dCode;
+if (Data.Scripts.ByName(getGlobal2dFunctionName)?.Code is UndertaleCode existingGetGlobal2dCode)
+{
+  getGlobal2dCode = existingGetGlobal2dCode;
+}
+else
+{
+  getGlobal2dCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + getGlobal2dFunctionName) };
+  Data.Code.Add(getGlobal2dCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(getGlobal2dFunctionName), Code = getGlobal2dCode };
   Data.Scripts.Add(scriptEntry);
-  
-  string saveBody = @"
+}
+
+string getGlobal2dBody = @"
 var _name = argument0;
-var _file = ""tenna/saves/"" + _name;
+var _y = argument1;
+var _x = argument2;
+
+if (!variable_global_exists(_name))
+    return 0;
+
+var _array = variable_global_get(_name);
+if (_y < 0 || _x < 0)
+    return 0;
+if (!is_array(_array))
+    return 0;
+if (_y >= array_height_2d(_array))
+    return 0;
+if (_x >= array_length_2d(_array, _y))
+    return 0;
+
+return _array[_y][_x];
+";
+importGroup.QueueReplace(getGlobal2dCode, getGlobal2dBody);
+
+var setGlobal2dFunctionName = "scr_tenna_sm_set_global_2d";
+UndertaleCode setGlobal2dCode;
+if (Data.Scripts.ByName(setGlobal2dFunctionName)?.Code is UndertaleCode existingSetGlobal2dCode)
+{
+  setGlobal2dCode = existingSetGlobal2dCode;
+}
+else
+{
+  setGlobal2dCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + setGlobal2dFunctionName) };
+  Data.Code.Add(setGlobal2dCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(setGlobal2dFunctionName), Code = setGlobal2dCode };
+  Data.Scripts.Add(scriptEntry);
+}
+
+string setGlobal2dBody = @"
+var _name = argument0;
+var _y = argument1;
+var _x = argument2;
+var _value = argument3;
+
+if (!variable_global_exists(_name))
+    return;
+
+var _array = variable_global_get(_name);
+if (_y < 0 || _x < 0)
+    return;
+if (!is_array(_array))
+    return;
+if (_y >= array_height_2d(_array))
+    return;
+if (_x >= array_length_2d(_array, _y))
+    return;
+
+_array[_y][_x] = _value;
+";
+importGroup.QueueReplace(setGlobal2dCode, setGlobal2dBody);
+
+var saveFunctionName = "scr_tenna_sm_save";
+UndertaleCode saveCode;
+if (Data.Scripts.ByName(saveFunctionName)?.Code is UndertaleCode existingSaveCode)
+{
+  saveCode = existingSaveCode;
+}
+else
+{
+  saveCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + saveFunctionName) };
+  Data.Code.Add(saveCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(saveFunctionName), Code = saveCode };
+  Data.Scripts.Add(scriptEntry);
+}
+
+string saveBody = @"
+var _name = argument0;
+var _safe_name = """";
+for (var _i = 1; _i <= string_length(_name); _i++)
+{
+    var _char = string_char_at(_name, _i);
+    var _code = ord(_char);
+    if ((_code >= 48 && _code <= 57) || (_code >= 65 && _code <= 90) || (_code >= 97 && _code <= 122) || _code == 45 || _code == 95)
+        _safe_name += _char;
+    else if (_char == "" "")
+        _safe_name += ""_"";
+}
+
+if (_safe_name == """")
+{
+    global._tenna_sm_msg = ""Invalid save name!"";
+    global._tenna_sm_msg_timer = 120;
+    return;
+}
+
+_name = _safe_name;
+directory_create(""tenna"");
+directory_create(""tenna/saves"");
+var _file = scr_tenna_sm_save_dir() + ""/"" + _name;
 
 var _f = file_text_open_write(_file);
+var _is_ch1 = variable_global_exists(""chapter"") && global.chapter == 1;
 
 file_text_write_string(_f, global.truename);
 file_text_writeln(_f);
@@ -395,154 +571,166 @@ for (var _i = 0; _i < 6; _i++)
     file_text_writeln(_f);
 }
 
-file_text_write_real(_f, global.char[0]);
+scr_tenna_sm_write_real(_f, global.char[0]);
 file_text_writeln(_f);
-file_text_write_real(_f, global.char[1]);
+scr_tenna_sm_write_real(_f, global.char[1]);
 file_text_writeln(_f);
-file_text_write_real(_f, global.char[2]);
+scr_tenna_sm_write_real(_f, global.char[2]);
 file_text_writeln(_f);
-file_text_write_real(_f, global.gold);
+scr_tenna_sm_write_real(_f, global.gold);
 file_text_writeln(_f);
-file_text_write_real(_f, global.xp);
+scr_tenna_sm_write_real(_f, global.xp);
 file_text_writeln(_f);
-file_text_write_real(_f, global.lv);
+scr_tenna_sm_write_real(_f, global.lv);
 file_text_writeln(_f);
-file_text_write_real(_f, global.inv);
+scr_tenna_sm_write_real(_f, global.inv);
 file_text_writeln(_f);
-file_text_write_real(_f, global.invc);
+scr_tenna_sm_write_real(_f, global.invc);
 file_text_writeln(_f);
-file_text_write_real(_f, global.darkzone);
+scr_tenna_sm_write_real(_f, global.darkzone);
 file_text_writeln(_f);
 
-for (var _i = 0; _i < 5; _i++)
+var _party_count = _is_ch1 ? 4 : 5;
+for (var _i = 0; _i < _party_count; _i++)
 {
-    file_text_write_real(_f, global.hp[_i]);
+    scr_tenna_sm_write_real(_f, global.hp[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.maxhp[_i]);
+    scr_tenna_sm_write_real(_f, global.maxhp[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.at[_i]);
+    scr_tenna_sm_write_real(_f, global.at[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.df[_i]);
+    scr_tenna_sm_write_real(_f, global.df[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.mag[_i]);
+    scr_tenna_sm_write_real(_f, global.mag[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.guts[_i]);
+    scr_tenna_sm_write_real(_f, global.guts[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.charweapon[_i]);
+    scr_tenna_sm_write_real(_f, global.charweapon[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.chararmor1[_i]);
+    scr_tenna_sm_write_real(_f, global.chararmor1[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.chararmor2[_i]);
+    scr_tenna_sm_write_real(_f, global.chararmor2[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.weaponstyle[_i]);
+    if (_is_ch1)
+        file_text_write_string(_f, string(global.weaponstyle[_i]));
+    else
+        scr_tenna_sm_write_real(_f, global.weaponstyle[_i]);
     file_text_writeln(_f);
     
     for (var _q = 0; _q < 4; _q++)
     {
-        file_text_write_real(_f, global.itemat[_i][_q]);
+        scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itemat"", _i, _q));
         file_text_writeln(_f);
-        file_text_write_real(_f, global.itemdf[_i][_q]);
+        scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itemdf"", _i, _q));
         file_text_writeln(_f);
-        file_text_write_real(_f, global.itemmag[_i][_q]);
+        scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itemmag"", _i, _q));
         file_text_writeln(_f);
-        file_text_write_real(_f, global.itembolts[_i][_q]);
+        scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itembolts"", _i, _q));
         file_text_writeln(_f);
-        file_text_write_real(_f, global.itemgrazeamt[_i][_q]);
+        scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itemgrazeamt"", _i, _q));
         file_text_writeln(_f);
-        file_text_write_real(_f, global.itemgrazesize[_i][_q]);
+        scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itemgrazesize"", _i, _q));
         file_text_writeln(_f);
-        file_text_write_real(_f, global.itemboltspeed[_i][_q]);
+        scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itemboltspeed"", _i, _q));
         file_text_writeln(_f);
-        file_text_write_real(_f, global.itemspecial[_i][_q]);
+        scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itemspecial"", _i, _q));
         file_text_writeln(_f);
-        file_text_write_real(_f, global.itemelement[_i][_q]);
-        file_text_writeln(_f);
-        file_text_write_real(_f, global.itemelementamount[_i][_q]);
-        file_text_writeln(_f);
+        if (!_is_ch1)
+        {
+            scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itemelement"", _i, _q));
+            file_text_writeln(_f);
+            scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""itemelementamount"", _i, _q));
+            file_text_writeln(_f);
+        }
     }
     
     for (var _j = 0; _j < 12; _j++)
     {
-        file_text_write_real(_f, global.spell[_i][_j]);
+        scr_tenna_sm_write_real(_f, scr_tenna_sm_get_global_2d(""spell"", _i, _j));
         file_text_writeln(_f);
     }
 }
 
-file_text_write_real(_f, global.boltspeed);
+scr_tenna_sm_write_real(_f, global.boltspeed);
 file_text_writeln(_f);
-file_text_write_real(_f, global.grazeamt);
+scr_tenna_sm_write_real(_f, global.grazeamt);
 file_text_writeln(_f);
-file_text_write_real(_f, global.grazesize);
+scr_tenna_sm_write_real(_f, global.grazesize);
 file_text_writeln(_f);
 
 for (var _j = 0; _j < 13; _j++)
 {
-    file_text_write_real(_f, global.item[_j]);
+    scr_tenna_sm_write_real(_f, global.item[_j]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.keyitem[_j]);
+    scr_tenna_sm_write_real(_f, global.keyitem[_j]);
     file_text_writeln(_f);
 }
 
-for (var _j = 0; _j < 48; _j++)
+var _equip_count = _is_ch1 ? 13 : 48;
+for (var _j = 0; _j < _equip_count; _j++)
 {
-    file_text_write_real(_f, global.weapon[_j]);
+    scr_tenna_sm_write_real(_f, global.weapon[_j]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.armor[_j]);
+    scr_tenna_sm_write_real(_f, global.armor[_j]);
     file_text_writeln(_f);
 }
 
-for (var _j = 0; _j < 72; _j++)
+if (!_is_ch1)
 {
-    file_text_write_real(_f, global.pocketitem[_j]);
-    file_text_writeln(_f);
+    for (var _j = 0; _j < 72; _j++)
+    {
+        scr_tenna_sm_write_real(_f, global.pocketitem[_j]);
+        file_text_writeln(_f);
+    }
 }
 
-file_text_write_real(_f, global.tension);
+scr_tenna_sm_write_real(_f, global.tension);
 file_text_writeln(_f);
-file_text_write_real(_f, global.maxtension);
+scr_tenna_sm_write_real(_f, global.maxtension);
 file_text_writeln(_f);
-file_text_write_real(_f, global.lweapon);
+scr_tenna_sm_write_real(_f, global.lweapon);
 file_text_writeln(_f);
-file_text_write_real(_f, global.larmor);
+scr_tenna_sm_write_real(_f, global.larmor);
 file_text_writeln(_f);
-file_text_write_real(_f, global.lxp);
+scr_tenna_sm_write_real(_f, global.lxp);
 file_text_writeln(_f);
-file_text_write_real(_f, global.llv);
+scr_tenna_sm_write_real(_f, global.llv);
 file_text_writeln(_f);
-file_text_write_real(_f, global.lgold);
+scr_tenna_sm_write_real(_f, global.lgold);
 file_text_writeln(_f);
-file_text_write_real(_f, global.lhp);
+scr_tenna_sm_write_real(_f, global.lhp);
 file_text_writeln(_f);
-file_text_write_real(_f, global.lmaxhp);
+scr_tenna_sm_write_real(_f, global.lmaxhp);
 file_text_writeln(_f);
-file_text_write_real(_f, global.lat);
+scr_tenna_sm_write_real(_f, global.lat);
 file_text_writeln(_f);
-file_text_write_real(_f, global.ldf);
+scr_tenna_sm_write_real(_f, global.ldf);
 file_text_writeln(_f);
-file_text_write_real(_f, global.lwstrength);
+scr_tenna_sm_write_real(_f, global.lwstrength);
 file_text_writeln(_f);
-file_text_write_real(_f, global.ladef);
+scr_tenna_sm_write_real(_f, global.ladef);
 file_text_writeln(_f);
 
 for (var _i = 0; _i < 8; _i++)
 {
-    file_text_write_real(_f, global.litem[_i]);
+    scr_tenna_sm_write_real(_f, global.litem[_i]);
     file_text_writeln(_f);
-    file_text_write_real(_f, global.phone[_i]);
+    scr_tenna_sm_write_real(_f, global.phone[_i]);
     file_text_writeln(_f);
 }
 
-for (var _i = 0; _i < 2500; _i++)
+var _flag_count = _is_ch1 ? 9999 : 2500;
+for (var _i = 0; _i < _flag_count; _i++)
 {
-    file_text_write_real(_f, global.flag[_i]);
+    scr_tenna_sm_write_real(_f, global.flag[_i]);
     file_text_writeln(_f);
 }
 
-file_text_write_real(_f, global.plot);
+scr_tenna_sm_write_real(_f, global.plot);
 file_text_writeln(_f);
-file_text_write_real(_f, global.currentroom);
+scr_tenna_sm_write_real(_f, global.currentroom);
 file_text_writeln(_f);
-file_text_write_real(_f, global.time);
+scr_tenna_sm_write_real(_f, global.time);
 file_text_writeln(_f);
 
 file_text_close(_f);
@@ -551,20 +739,25 @@ global._tenna_sm_msg = ""Saved: "" + _name;
 global._tenna_sm_msg_timer = 120;
 scr_tenna_log(""SaveManager"", ""Saved to slot: "" + _name);
 ";
-  importGroup.QueueReplace(codeEntry, saveBody);
-}
+importGroup.QueueReplace(saveCode, saveBody);
 
 var loadFunctionName = "scr_tenna_sm_load";
-if (Data.Scripts.ByName(loadFunctionName) is null)
+UndertaleCode loadCode;
+if (Data.Scripts.ByName(loadFunctionName)?.Code is UndertaleCode existingLoadCode)
 {
-  var codeEntry = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + loadFunctionName) };
-  Data.Code.Add(codeEntry);
-  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(loadFunctionName), Code = codeEntry };
+  loadCode = existingLoadCode;
+}
+else
+{
+  loadCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + loadFunctionName) };
+  Data.Code.Add(loadCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(loadFunctionName), Code = loadCode };
   Data.Scripts.Add(scriptEntry);
-  
-  string loadBody = @"
+}
+
+string loadBody = @"
 var _name = argument0;
-var _file = ""tenna/saves/"" + _name;
+var _file = scr_tenna_sm_save_dir() + ""/"" + _name;
 
 if (!file_exists(_file))
 {
@@ -577,6 +770,7 @@ snd_free_all();
 scr_gamestart();
 
 var _f = file_text_open_read(_file);
+var _is_ch1 = variable_global_exists(""chapter"") && global.chapter == 1;
 
 global.truename = file_text_read_string(_f);
 file_text_readln(_f);
@@ -606,7 +800,8 @@ file_text_readln(_f);
 global.darkzone = file_text_read_real(_f);
 file_text_readln(_f);
 
-for (var _i = 0; _i < 5; _i++)
+var _party_count = _is_ch1 ? 4 : 5;
+for (var _i = 0; _i < _party_count; _i++)
 {
     global.hp[_i] = file_text_read_real(_f);
     file_text_readln(_f);
@@ -626,36 +821,42 @@ for (var _i = 0; _i < 5; _i++)
     file_text_readln(_f);
     global.chararmor2[_i] = file_text_read_real(_f);
     file_text_readln(_f);
-    global.weaponstyle[_i] = file_text_read_real(_f);
+    if (_is_ch1)
+        global.weaponstyle[_i] = file_text_read_string(_f);
+    else
+        global.weaponstyle[_i] = file_text_read_real(_f);
     file_text_readln(_f);
     
     for (var _q = 0; _q < 4; _q++)
     {
-        global.itemat[_i][_q] = file_text_read_real(_f);
+        scr_tenna_sm_set_global_2d(""itemat"", _i, _q, file_text_read_real(_f));
         file_text_readln(_f);
-        global.itemdf[_i][_q] = file_text_read_real(_f);
+        scr_tenna_sm_set_global_2d(""itemdf"", _i, _q, file_text_read_real(_f));
         file_text_readln(_f);
-        global.itemmag[_i][_q] = file_text_read_real(_f);
+        scr_tenna_sm_set_global_2d(""itemmag"", _i, _q, file_text_read_real(_f));
         file_text_readln(_f);
-        global.itembolts[_i][_q] = file_text_read_real(_f);
+        scr_tenna_sm_set_global_2d(""itembolts"", _i, _q, file_text_read_real(_f));
         file_text_readln(_f);
-        global.itemgrazeamt[_i][_q] = file_text_read_real(_f);
+        scr_tenna_sm_set_global_2d(""itemgrazeamt"", _i, _q, file_text_read_real(_f));
         file_text_readln(_f);
-        global.itemgrazesize[_i][_q] = file_text_read_real(_f);
+        scr_tenna_sm_set_global_2d(""itemgrazesize"", _i, _q, file_text_read_real(_f));
         file_text_readln(_f);
-        global.itemboltspeed[_i][_q] = file_text_read_real(_f);
+        scr_tenna_sm_set_global_2d(""itemboltspeed"", _i, _q, file_text_read_real(_f));
         file_text_readln(_f);
-        global.itemspecial[_i][_q] = file_text_read_real(_f);
+        scr_tenna_sm_set_global_2d(""itemspecial"", _i, _q, file_text_read_real(_f));
         file_text_readln(_f);
-        global.itemelement[_i][_q] = file_text_read_real(_f);
-        file_text_readln(_f);
-        global.itemelementamount[_i][_q] = file_text_read_real(_f);
-        file_text_readln(_f);
+        if (!_is_ch1)
+        {
+            scr_tenna_sm_set_global_2d(""itemelement"", _i, _q, file_text_read_real(_f));
+            file_text_readln(_f);
+            scr_tenna_sm_set_global_2d(""itemelementamount"", _i, _q, file_text_read_real(_f));
+            file_text_readln(_f);
+        }
     }
     
     for (var _j = 0; _j < 12; _j++)
     {
-        global.spell[_i][_j] = file_text_read_real(_f);
+        scr_tenna_sm_set_global_2d(""spell"", _i, _j, file_text_read_real(_f));
         file_text_readln(_f);
     }
 }
@@ -675,7 +876,8 @@ for (var _j = 0; _j < 13; _j++)
     file_text_readln(_f);
 }
 
-for (var _j = 0; _j < 48; _j++)
+var _equip_count = _is_ch1 ? 13 : 48;
+for (var _j = 0; _j < _equip_count; _j++)
 {
     global.weapon[_j] = file_text_read_real(_f);
     file_text_readln(_f);
@@ -683,10 +885,13 @@ for (var _j = 0; _j < 48; _j++)
     file_text_readln(_f);
 }
 
-for (var _j = 0; _j < 72; _j++)
+if (!_is_ch1)
 {
-    global.pocketitem[_j] = file_text_read_real(_f);
-    file_text_readln(_f);
+    for (var _j = 0; _j < 72; _j++)
+    {
+        global.pocketitem[_j] = file_text_read_real(_f);
+        file_text_readln(_f);
+    }
 }
 
 global.tension = file_text_read_real(_f);
@@ -724,7 +929,8 @@ for (var _i = 0; _i < 8; _i++)
     file_text_readln(_f);
 }
 
-for (var _i = 0; _i < 2500; _i++)
+var _flag_count = _is_ch1 ? 9999 : 2500;
+for (var _i = 0; _i < _flag_count; _i++)
 {
     global.flag[_i] = file_text_read_real(_f);
     file_text_readln(_f);
@@ -770,20 +976,25 @@ scr_tenna_log(""SaveManager"", ""Loaded from slot: "" + _name);
 
 room_goto(_loadedroom);
 ";
-  importGroup.QueueReplace(codeEntry, loadBody);
-}
+importGroup.QueueReplace(loadCode, loadBody);
 
 var deleteFunctionName = "scr_tenna_sm_delete";
-if (Data.Scripts.ByName(deleteFunctionName) is null)
+UndertaleCode deleteCode;
+if (Data.Scripts.ByName(deleteFunctionName)?.Code is UndertaleCode existingDeleteCode)
 {
-  var codeEntry = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + deleteFunctionName) };
-  Data.Code.Add(codeEntry);
-  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(deleteFunctionName), Code = codeEntry };
+  deleteCode = existingDeleteCode;
+}
+else
+{
+  deleteCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + deleteFunctionName) };
+  Data.Code.Add(deleteCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(deleteFunctionName), Code = deleteCode };
   Data.Scripts.Add(scriptEntry);
-  
-  string deleteBody = @"
+}
+
+string deleteBody = @"
 var _name = argument0;
-var _file = ""tenna/saves/"" + _name;
+var _file = scr_tenna_sm_save_dir() + ""/"" + _name;
 
 if (file_exists(_file))
 {
@@ -793,17 +1004,20 @@ if (file_exists(_file))
     scr_tenna_log(""SaveManager"", ""Deleted slot: "" + _name);
 }
 ";
-  importGroup.QueueReplace(codeEntry, deleteBody);
-}
+importGroup.QueueReplace(deleteCode, deleteBody);
 
 try
 {
-  importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
-  importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
-  importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
+  if (!saveManagerAlreadyInstalled)
+  {
+    importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
+    importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
+    importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
+  }
   
   importGroup.Import();
-  ScriptMessage("Save Manager installed!\n\nAlt+S to open save menu.\n\nControls:\n- Arrow keys: Navigate\n- Z/Enter: Select\n- X/Esc: Back\n- Left/Right: Switch action");
+  if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
+    ScriptMessage("Save Manager " + (saveManagerAlreadyInstalled ? "updated" : "installed") + "!\n\nAlt+S to open save menu.\n\nControls:\n- Arrow keys: Navigate\n- Z/Enter: Select\n- X/Esc: Back\n- Left/Right: Switch action");
 }
 catch (Exception ex)
 {
