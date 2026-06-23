@@ -52,12 +52,17 @@ Dumps save-relevant globals for the current state to `tenna/state/state-YYYY-MM-
 
 **Hotkey:** Alt+5 to dump state
 
+### GameNotes.csx
+Opens a note prompt and writes the message to the Tenna Core log.
+
+**Hotkey:** Alt+N to open note prompt
+
 ### GameSaveManager.csx
 ![savemanager](/assets/savemanager.png)
 In-game save manager with chapter-separated save slots stored in `tenna/saves/chapter<N>/`. Uses the vanilla save format.
 
 **Hotkey:** Alt+S to open menu  
-**Controls:** Arrows navigate, Z/Enter select, X/Esc cancel, Left/Right switch Load/Delete
+**Controls:** Up/Down move, Shift+Up/Down or PageUp/PageDown page, Home/End jump, Z/Enter select, X/Esc cancel, Left/Right switch Load/Delete
 
 ## Data Exporters
 

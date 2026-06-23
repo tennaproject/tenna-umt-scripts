@@ -12,6 +12,7 @@ string[] scriptLabels = new string[] {
   "Plot Watcher",
   "Flag Editor",
   "State Dump",
+  "Notes",
   "Save Manager",
 };
 
@@ -20,6 +21,7 @@ string[] scriptFiles = new string[] {
   "GamePlotWatcher.csx",
   "GameFlagEditor.csx",
   "GameStateDump.csx",
+  "GameNotes.csx",
   "GameSaveManager.csx",
 };
 
