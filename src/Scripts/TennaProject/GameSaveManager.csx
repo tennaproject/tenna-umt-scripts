@@ -32,6 +32,7 @@ UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 };
 
 string createInit = @"
+// TENNA_SAVE_MANAGER_CREATE_BEGIN
 global._tenna_sm_enabled = true;
 global._tenna_sm_open = false;
 global._tenna_sm_saves[0] = """";
@@ -49,9 +50,11 @@ directory_create(""tenna"");
 directory_create(""tenna/saves"");
 
 scr_tenna_sm_refresh();
+// TENNA_SAVE_MANAGER_CREATE_END
 ";
 
 string stepCheck = @"
+// TENNA_SAVE_MANAGER_STEP_BEGIN
 if (keyboard_check_pressed(ord(""S"")) && keyboard_check(vk_alt) && !global._tenna_sm_input_active)
 {
     global._tenna_sm_open = !global._tenna_sm_open;
@@ -61,6 +64,7 @@ if (keyboard_check_pressed(ord(""S"")) && keyboard_check(vk_alt) && !global._ten
         global._tenna_sm_input = """";
         global._tenna_sm_input_active = false;
         scr_tenna_sm_refresh();
+        scr_tenna_sm_focus_selected();
         instance_deactivate_all(true);
         instance_activate_object(obj_time);
         instance_activate_object(obj_gamecontroller);
@@ -88,6 +92,7 @@ if (global._tenna_sm_open)
                 global._tenna_sm_input_active = false;
                 global._tenna_sm_input = """";
                 scr_tenna_sm_refresh();
+                scr_tenna_sm_focus_selected();
             }
         }
         else if (keyboard_check_pressed(vk_backspace))
@@ -114,29 +119,37 @@ if (global._tenna_sm_open)
             instance_activate_all();
             global._tenna_sm_open = false;
         }
-        
+
+        var _sm_nav = 0;
         if (keyboard_check_pressed(vk_up))
-        {
-            global._tenna_sm_selected -= 1;
-            if (global._tenna_sm_selected < 0)
-                global._tenna_sm_selected = global._tenna_sm_count + 1;
-            
-            if (global._tenna_sm_selected < global._tenna_sm_scroll)
-                global._tenna_sm_scroll = global._tenna_sm_selected;
-            if (global._tenna_sm_selected >= global._tenna_sm_scroll + global._tenna_sm_max_visible)
-                global._tenna_sm_scroll = global._tenna_sm_selected - global._tenna_sm_max_visible + 1;
-        }
-        
+            _sm_nav = keyboard_check(vk_shift) ? -global._tenna_sm_max_visible : -1;
         if (keyboard_check_pressed(vk_down))
+            _sm_nav = keyboard_check(vk_shift) ? global._tenna_sm_max_visible : 1;
+        if (keyboard_check_pressed(vk_pageup))
+            _sm_nav = -global._tenna_sm_max_visible;
+        if (keyboard_check_pressed(vk_pagedown))
+            _sm_nav = global._tenna_sm_max_visible;
+
+        if (_sm_nav != 0)
         {
-            global._tenna_sm_selected += 1;
-            if (global._tenna_sm_selected > global._tenna_sm_count + 1)
+            global._tenna_sm_selected += _sm_nav;
+            if (global._tenna_sm_selected < 0)
                 global._tenna_sm_selected = 0;
-            
-            if (global._tenna_sm_selected < global._tenna_sm_scroll)
-                global._tenna_sm_scroll = global._tenna_sm_selected;
-            if (global._tenna_sm_selected >= global._tenna_sm_scroll + global._tenna_sm_max_visible)
-                global._tenna_sm_scroll = global._tenna_sm_selected - global._tenna_sm_max_visible + 1;
+            if (global._tenna_sm_selected > global._tenna_sm_count + 1)
+                global._tenna_sm_selected = global._tenna_sm_count + 1;
+            scr_tenna_sm_focus_selected();
+        }
+
+        if (keyboard_check_pressed(vk_home))
+        {
+            global._tenna_sm_selected = 0;
+            scr_tenna_sm_focus_selected();
+        }
+
+        if (keyboard_check_pressed(vk_end))
+        {
+            global._tenna_sm_selected = global._tenna_sm_count + 1;
+            scr_tenna_sm_focus_selected();
         }
         
         if (keyboard_check_pressed(vk_enter) || keyboard_check_pressed(ord(""Z"")))
@@ -159,6 +172,7 @@ if (global._tenna_sm_open)
                 var _qname = ""ch"" + string(global.chapter) + ""_"" + _ts;
                 scr_tenna_sm_save(_qname);
                 scr_tenna_sm_refresh();
+                scr_tenna_sm_focus_selected();
             }
             else if (global._tenna_sm_selected <= global._tenna_sm_count + 1 && global._tenna_sm_mode == 0)
             {
@@ -179,6 +193,7 @@ if (global._tenna_sm_open)
                 global._tenna_sm_mode = 0;
                 if (global._tenna_sm_selected > global._tenna_sm_count + 1)
                     global._tenna_sm_selected = global._tenna_sm_count + 1;
+                scr_tenna_sm_focus_selected();
             }
         }
         
@@ -208,9 +223,11 @@ if (global._tenna_sm_open)
 
 if (global._tenna_sm_msg_timer > 0)
     global._tenna_sm_msg_timer -= 1;
+// TENNA_SAVE_MANAGER_STEP_END
 ";
 
 string drawDisplay = @"
+// TENNA_SAVE_MANAGER_DRAW_BEGIN
 if (global._tenna_sm_open)
 {
     draw_set_alpha(0.85);
@@ -288,8 +305,8 @@ if (global._tenna_sm_open)
     
     draw_set_halign(fa_center);
     draw_set_color(c_gray);
-    draw_text(320, 440, ""[Arrow Keys] Navigate  |  [Z/Enter] Select  |  [X/Esc] Back"");
-    draw_text(320, 458, ""[Left/Right] Switch Action"");
+    draw_text(320, 432, ""[Up/Down] Move  |  [Shift+Up/Down] Page  |  [Home/End] Jump"");
+    draw_text(320, 450, ""[Z/Enter] Select  |  [X/Esc] Back  |  [Left/Right] Switch Action"");
     
     if (global._tenna_core_visible)
     {
@@ -326,7 +343,51 @@ if (global._tenna_sm_msg_timer > 0)
     draw_set_halign(fa_left);
     draw_set_color(c_white);
 }
+// TENNA_SAVE_MANAGER_DRAW_END
 ";
+
+var focusSelectedFunctionName = "scr_tenna_sm_focus_selected";
+UndertaleCode focusSelectedCode;
+if (Data.Scripts.ByName(focusSelectedFunctionName)?.Code is UndertaleCode existingFocusSelectedCode)
+{
+  focusSelectedCode = existingFocusSelectedCode;
+}
+else
+{
+  focusSelectedCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + focusSelectedFunctionName) };
+  Data.Code.Add(focusSelectedCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(focusSelectedFunctionName), Code = focusSelectedCode };
+  Data.Scripts.Add(scriptEntry);
+}
+
+string focusSelectedBody = @"
+if (global._tenna_sm_selected < 0)
+    global._tenna_sm_selected = 0;
+if (global._tenna_sm_selected > global._tenna_sm_count + 1)
+    global._tenna_sm_selected = global._tenna_sm_count + 1;
+
+var _save_selected = global._tenna_sm_selected - 2;
+
+if (_save_selected < 0)
+{
+    global._tenna_sm_scroll = 0;
+}
+else
+{
+    if (_save_selected < global._tenna_sm_scroll)
+        global._tenna_sm_scroll = _save_selected;
+    if (_save_selected >= global._tenna_sm_scroll + global._tenna_sm_max_visible)
+        global._tenna_sm_scroll = _save_selected - global._tenna_sm_max_visible + 1;
+}
+
+if (global._tenna_sm_scroll < 0)
+    global._tenna_sm_scroll = 0;
+
+var _max_scroll = max(0, global._tenna_sm_count - global._tenna_sm_max_visible);
+if (global._tenna_sm_scroll > _max_scroll)
+    global._tenna_sm_scroll = _max_scroll;
+";
+importGroup.QueueReplace(focusSelectedCode, focusSelectedBody);
 
 var saveDirFunctionName = "scr_tenna_sm_save_dir";
 UndertaleCode saveDirCode;
@@ -756,6 +817,7 @@ else
 }
 
 string loadBody = @"
+global._tenna_loading_save = true;
 var _name = argument0;
 var _file = scr_tenna_sm_save_dir() + ""/"" + _name;
 
@@ -763,6 +825,7 @@ if (!file_exists(_file))
 {
     global._tenna_sm_msg = ""File not found!"";
     global._tenna_sm_msg_timer = 120;
+    global._tenna_loading_save = false;
     return;
 }
 
@@ -974,6 +1037,7 @@ global._tenna_sm_msg = ""Loaded: "" + _name;
 global._tenna_sm_msg_timer = 120;
 scr_tenna_log(""SaveManager"", ""Loaded from slot: "" + _name);
 
+global._tenna_loading_save = false;
 room_goto(_loadedroom);
 ";
 importGroup.QueueReplace(loadCode, loadBody);
@@ -1008,18 +1072,128 @@ importGroup.QueueReplace(deleteCode, deleteBody);
 
 try
 {
-  if (!saveManagerAlreadyInstalled)
-  {
-    importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
-    importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
-    importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
-  }
+  string currentStepText = GetDecompiledText(stepCode);
+  string currentDrawText = GetDecompiledText(drawCode);
+  string currentCreateText = GetDecompiledText(createCode);
+
+  string cleanCreate = TennaCleanAllBlocks(currentCreateText, "global._tenna_sm_enabled = true;", "scr_tenna_sm_refresh();");
+  importGroup.QueueReplace(createCode, cleanCreate + createInit);
+
+  string cleanStep = TennaCleanAllBlocks(currentStepText, "keyboard_check_pressed(ord(\"S\"))", "global._tenna_sm_msg_timer--;");
+  importGroup.QueueReplace(stepCode, stepCheck + cleanStep);
+
+  string cleanDraw = TennaCleanAllBraceBlocks(currentDrawText, "global._tenna_sm_open");
+  importGroup.QueueReplace(drawCode, cleanDraw + drawDisplay);
   
   importGroup.Import();
   if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
-    ScriptMessage("Save Manager " + (saveManagerAlreadyInstalled ? "updated" : "installed") + "!\n\nAlt+S to open save menu.\n\nControls:\n- Arrow keys: Navigate\n- Z/Enter: Select\n- X/Esc: Back\n- Left/Right: Switch action");
+    ScriptMessage("Save Manager " + (saveManagerAlreadyInstalled ? "updated" : "installed") + "!\n\nAlt+S to open save menu.\n\nControls:\n- Up/Down: Move\n- Shift+Up/Down or PageUp/PageDown: Page\n- Home/End: Jump\n- Z/Enter: Select\n- X/Esc: Back\n- Left/Right: Switch action");
 }
 catch (Exception ex)
 {
   ScriptError($"Failed to install: {ex.Message}");
 }
+
+string TennaCleanBlock(string source, string startPattern, string endPattern)
+{
+  int startIdx = source.IndexOf(startPattern, StringComparison.Ordinal);
+  if (startIdx < 0)
+    return source;
+
+  int ifIdx = source.LastIndexOf("if", startIdx, StringComparison.Ordinal);
+  if (ifIdx >= 0 && startIdx - ifIdx < 15)
+    startIdx = ifIdx;
+
+  int endIdx = source.IndexOf(endPattern, startIdx, StringComparison.Ordinal);
+  if (endIdx < 0)
+    return source;
+
+  endIdx += endPattern.Length;
+
+  int braceCount = 0;
+  while (endIdx < source.Length)
+  {
+    char c = source[endIdx];
+    if (c == '\r' || c == '\n' || c == ' ')
+    {
+      endIdx++;
+    }
+    else if (c == '}' && braceCount < 3)
+    {
+      endIdx++;
+      braceCount++;
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  return source.Substring(0, startIdx) + source.Substring(endIdx);
+}
+
+string TennaCleanAllBlocks(string source, string startPattern, string endPattern)
+{
+  string current = source;
+  while (true)
+  {
+    string cleaned = TennaCleanBlock(current, startPattern, endPattern);
+    if (cleaned == current)
+      break;
+    current = cleaned;
+  }
+  return current;
+}
+
+string TennaCleanBraceBlock(string source, string startPattern)
+{
+  int startIdx = source.IndexOf(startPattern, StringComparison.Ordinal);
+  if (startIdx < 0)
+    return source;
+
+  int ifIdx = source.LastIndexOf("if", startIdx, StringComparison.Ordinal);
+  if (ifIdx >= 0 && startIdx - ifIdx < 15)
+    startIdx = ifIdx;
+
+  int braceIdx = source.IndexOf("{", startIdx, StringComparison.Ordinal);
+  if (braceIdx < 0)
+    return source;
+
+  int level = 1;
+  int scanIdx = braceIdx + 1;
+  while (scanIdx < source.Length && level > 0)
+  {
+    char c = source[scanIdx];
+    if (c == '{')
+      level++;
+    else if (c == '}')
+      level--;
+    scanIdx++;
+  }
+
+  if (level == 0)
+  {
+    int endIdx = scanIdx;
+    while (endIdx < source.Length && (source[endIdx] == '\r' || source[endIdx] == '\n' || source[endIdx] == ' '))
+    {
+      endIdx++;
+    }
+    return source.Substring(0, startIdx) + source.Substring(endIdx);
+  }
+
+  return source;
+}
+
+string TennaCleanAllBraceBlocks(string source, string startPattern)
+{
+  string current = source;
+  while (true)
+  {
+    string cleaned = TennaCleanBraceBlock(current, startPattern);
+    if (cleaned == current)
+      break;
+    current = cleaned;
+  }
+  return current;
+}
+
