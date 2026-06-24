@@ -40,6 +40,7 @@ directory_create(""tenna"");
 directory_create(""tenna/flag-logs"");
 global._tenna_fw_export_filename = ""tenna/flag-logs/flags-"" + global._tenna_core_ts + "".jsonl"";
 global._tenna_loading_save = false;
+global._tenna_fw_frame_writes = 0;
 
 var _tenna_fw_room = -1;
 if (variable_global_exists(""currentroom""))
@@ -63,7 +64,7 @@ if (variable_global_exists(""flag"") && is_array(global.flag))
     {
         _tenna_fw_shadow[_tenna_fw_i] = global.flag[_tenna_fw_i];
 
-        if (_tenna_fw_i == 20 || _tenna_fw_i == 21 || _tenna_fw_i == 33)
+        if (_tenna_fw_i == 6 || _tenna_fw_i == 20 || _tenna_fw_i == 21 || _tenna_fw_i == 33)
             continue;
 
         scr_tenna_fw_write_row(_tenna_fw_file, ""baseline"", _tenna_fw_i, 0, global.flag[_tenna_fw_i], 0, _tenna_fw_chapter, _tenna_fw_room, _tenna_fw_plot);
@@ -82,6 +83,10 @@ for (var _tenna_fw_i = 0; _tenna_fw_i < _tenna_fw_max_log; _tenna_fw_i++)
 
 string stepCheck = @"
 // TENNA_FLAG_WATCHER_STEP_BEGIN
+global._tenna_fw_frame_writes = 0;
+if (global._tenna_loading_save)
+    global._tenna_loading_save = false;
+
 if (keyboard_check_pressed(ord(""2"")) && keyboard_check(vk_alt))
     _tenna_fw_visible = !_tenna_fw_visible;
 
@@ -204,7 +209,17 @@ if (!variable_global_exists(""_tenna_core_enabled"") || !global._tenna_core_enab
 if (variable_global_exists(""_tenna_loading_save"") && global._tenna_loading_save)
     return 0;
 
-if (_index == 20 || _index == 21 || _index == 33)
+if (variable_global_exists(""_tenna_fw_frame_writes""))
+{
+    global._tenna_fw_frame_writes++;
+    if (global._tenna_fw_frame_writes > 50)
+    {
+        global._tenna_loading_save = true;
+        return 0;
+    }
+}
+
+if (_index == 6 || _index == 20 || _index == 21 || _index == 33)
     return 0;
 
 if (_old == _value)
@@ -265,24 +280,7 @@ try
 
   importGroup.Import();
   
-  // Patch vanilla scr_load to suppress log spam during loading
-  if (Data.Code.ByName("gml_Script_scr_load") is UndertaleCode scrLoadCode)
-  {
-    string scrLoadText = GetDecompiledText(scrLoadCode);
-    if (!scrLoadText.Contains("_tenna_loading_save"))
-    {
-      string newScrLoad = scrLoadText.Replace("snd_free_all();", "global._tenna_loading_save = true;\n    snd_free_all();");
-      newScrLoad = newScrLoad.Replace("global.currentroom = __loadedroom;\n}", "global.currentroom = __loadedroom;\n    global._tenna_loading_save = false;\n}");
-      
-      try
-      {
-        UndertaleModLib.Compiler.CodeImportGroup loadGroup = new(Data) { ThrowOnNoOpFindReplace = false };
-        loadGroup.QueueReplace(scrLoadCode, newScrLoad);
-        loadGroup.Import();
-      }
-      catch (Exception) { }
-    }
-  }
+
 
   // Hook global.flag assignments
   int hookedCount = 0;
@@ -294,6 +292,9 @@ try
     if (code.Name.Content.StartsWith("gml_Script_scr_tenna_"))
       continue;
     if (code.Name.Content == "gml_Object_obj_time_Create_0" || code.Name.Content == "gml_Object_obj_time_Step_1" || code.Name.Content == "gml_Object_obj_time_Draw_64")
+      continue;
+
+    if (!ReferencesFlag(code))
       continue;
 
     string originalText = GetDecompiledText(code);
@@ -588,4 +589,16 @@ string TennaCleanAllBraceBlocks(string source, string startPattern)
     current = cleaned;
   }
   return current;
+}
+
+bool ReferencesFlag(UndertaleCode code)
+{
+  if (code.Instructions == null)
+    return false;
+  foreach (var instr in code.Instructions)
+  {
+    if (instr.Kind == UndertaleInstruction.Opcode.Pop && instr.ValueVariable is UndertaleVariable v && v.Name?.Content == "flag")
+      return true;
+  }
+  return false;
 }
