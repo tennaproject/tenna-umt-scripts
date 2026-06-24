@@ -25,6 +25,10 @@ UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 };
 
 string createInit = @"
+// TENNA_CORE_CREATE_BEGIN
+if (instance_number(obj_time) > 1)
+    exit;
+
 global._tenna_core_enabled = true;
 global._tenna_core_visible = true;
 global._tenna_core_start_time = current_time;
@@ -54,14 +58,18 @@ file_text_write_string(_f, ""Tenna Core "" + global._tenna_core_ver + "" "" + _t
 file_text_writeln(_f);
 file_text_writeln(_f);
 file_text_close(_f);
+// TENNA_CORE_CREATE_END
 ";
 
 string stepCheck = @"
+// TENNA_CORE_STEP_BEGIN
 if (keyboard_check_pressed(ord(""1"")) && keyboard_check(vk_alt))
     global._tenna_core_visible = !global._tenna_core_visible;
+// TENNA_CORE_STEP_END
 ";
 
 string drawDisplay = @"
+// TENNA_CORE_DRAW_BEGIN
 if (global._tenna_core_visible)
 {
     var _tenna_elapsed = (current_time - global._tenna_core_start_time) / 1000;
@@ -80,6 +88,7 @@ if (global._tenna_core_visible)
     draw_set_halign(fa_left);
     draw_set_valign(fa_top);
 }
+// TENNA_CORE_DRAW_END
 ";
 
 var logFuncName = "scr_tenna_log";
@@ -118,12 +127,18 @@ importGroup.QueueReplace(logCode, logFuncBody);
 
 try
 {
-  if (!coreAlreadyInstalled)
-  {
-    importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
-    importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
-    importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
-  }
+  string currentCreateText = GetDecompiledText(createCode);
+  string currentStepText = GetDecompiledText(stepCode);
+  string currentDrawText = GetDecompiledText(drawCode);
+
+  string cleanCreate = TennaCleanAllBlocks(currentCreateText, "global._tenna_core_enabled = true;", "file_text_close(_f);");
+  importGroup.QueueReplace(createCode, cleanCreate + createInit);
+
+  string cleanStep = TennaCleanAllBlocks(currentStepText, "keyboard_check_pressed(ord(\"1\"))", "global._tenna_core_visible = !global._tenna_core_visible;");
+  importGroup.QueueReplace(stepCode, stepCheck + cleanStep);
+
+  string cleanDraw = TennaCleanAllBraceBlocks(currentDrawText, "global._tenna_core_visible");
+  importGroup.QueueReplace(drawCode, cleanDraw + drawDisplay);
   
   importGroup.Import();
   if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
@@ -133,3 +148,107 @@ catch (Exception ex)
 {
   ScriptError($"Failed to install: {ex.Message}");
 }
+
+string TennaCleanBlock(string source, string startPattern, string endPattern)
+{
+  int startIdx = source.IndexOf(startPattern, StringComparison.Ordinal);
+  if (startIdx < 0)
+    return source;
+
+  int ifIdx = source.LastIndexOf("if", startIdx, StringComparison.Ordinal);
+  if (ifIdx >= 0 && startIdx - ifIdx < 15)
+    startIdx = ifIdx;
+
+  int endIdx = source.IndexOf(endPattern, startIdx, StringComparison.Ordinal);
+  if (endIdx < 0)
+    return source;
+
+  endIdx += endPattern.Length;
+
+  int braceCount = 0;
+  while (endIdx < source.Length)
+  {
+    char c = source[endIdx];
+    if (c == '\r' || c == '\n' || c == ' ')
+    {
+      endIdx++;
+    }
+    else if (c == '}' && braceCount < 3)
+    {
+      endIdx++;
+      braceCount++;
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  return source.Substring(0, startIdx) + source.Substring(endIdx);
+}
+
+string TennaCleanAllBlocks(string source, string startPattern, string endPattern)
+{
+  string current = source;
+  while (true)
+  {
+    string cleaned = TennaCleanBlock(current, startPattern, endPattern);
+    if (cleaned == current)
+      break;
+    current = cleaned;
+  }
+  return current;
+}
+
+string TennaCleanBraceBlock(string source, string startPattern)
+{
+  int startIdx = source.IndexOf(startPattern, StringComparison.Ordinal);
+  if (startIdx < 0)
+    return source;
+
+  int ifIdx = source.LastIndexOf("if", startIdx, StringComparison.Ordinal);
+  if (ifIdx >= 0 && startIdx - ifIdx < 15)
+    startIdx = ifIdx;
+
+  int braceIdx = source.IndexOf("{", startIdx, StringComparison.Ordinal);
+  if (braceIdx < 0)
+    return source;
+
+  int level = 1;
+  int scanIdx = braceIdx + 1;
+  while (scanIdx < source.Length && level > 0)
+  {
+    char c = source[scanIdx];
+    if (c == '{')
+      level++;
+    else if (c == '}')
+      level--;
+    scanIdx++;
+  }
+
+  if (level == 0)
+  {
+    int endIdx = scanIdx;
+    while (endIdx < source.Length && (source[endIdx] == '\r' || source[endIdx] == '\n' || source[endIdx] == ' '))
+    {
+      endIdx++;
+    }
+    return source.Substring(0, startIdx) + source.Substring(endIdx);
+  }
+
+  return source;
+}
+
+string TennaCleanAllBraceBlocks(string source, string startPattern)
+{
+  string current = source;
+  while (true)
+  {
+    string cleaned = TennaCleanBraceBlock(current, startPattern);
+    if (cleaned == current)
+      break;
+    current = cleaned;
+  }
+  return current;
+}
+

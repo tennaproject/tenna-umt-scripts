@@ -53,16 +53,12 @@ try
     return;
   }
 
-  if (!TennaIsCoreInstalled())
+  if (!TennaRunQuiet(corePath))
   {
-    if (!TennaRunQuiet(corePath))
-    {
-      ScriptError("Stopped after mandatory Core failed.");
-      return;
-    }
-
-    installedCount++;
+    ScriptError("Stopped after mandatory Core failed.");
+    return;
   }
+  installedCount++;
 
   for (int i = 1; i < selected.Length; i++)
   {

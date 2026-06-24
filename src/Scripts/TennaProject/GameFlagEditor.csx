@@ -32,6 +32,7 @@ UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 };
 
 string createInit = @"
+// TENNA_FLAG_EDITOR_CREATE_BEGIN
 global._tenna_fe_enabled = true;
 global._tenna_fe_open = false;
 global._tenna_fe_field = 0;
@@ -43,10 +44,16 @@ global._tenna_fe_confirm = false;
 global._tenna_fe_msg = """";
 global._tenna_fe_msg_timer = 0;
 
+global._tenna_fe_flag_max = 2499;
+if (variable_global_exists(""flag"") && is_array(global.flag))
+    global._tenna_fe_flag_max = array_length(global.flag) - 1;
+
 directory_create(""tenna"");
+// TENNA_FLAG_EDITOR_CREATE_END
 ";
 
 string stepCheck = @"
+// TENNA_FLAG_EDITOR_STEP_BEGIN
 if (keyboard_check_pressed(ord(""4"")) && keyboard_check(vk_alt))
 {
     global._tenna_fe_open = !global._tenna_fe_open;
@@ -95,8 +102,8 @@ if (global._tenna_fe_open)
                 global._tenna_fe_flag_id += _delta;
                 if (global._tenna_fe_flag_id < 0)
                     global._tenna_fe_flag_id = 0;
-                if (global._tenna_fe_flag_id > 2499)
-                    global._tenna_fe_flag_id = 2499;
+                if (global._tenna_fe_flag_id > global._tenna_fe_flag_max)
+                    global._tenna_fe_flag_id = global._tenna_fe_flag_max;
                 global._tenna_fe_flag_input = string(global._tenna_fe_flag_id);
             }
             else
@@ -179,9 +186,11 @@ if (global._tenna_fe_open)
 
 if (global._tenna_fe_msg_timer > 0)
     global._tenna_fe_msg_timer -= 1;
+// TENNA_FLAG_EDITOR_STEP_END
 ";
 
 string drawDisplay = @"
+// TENNA_FLAG_EDITOR_DRAW_BEGIN
 if (global._tenna_fe_open)
 {
     draw_set_alpha(0.85);
@@ -237,6 +246,7 @@ if (global._tenna_fe_msg_timer > 0)
     draw_set_halign(fa_left);
     draw_set_color(c_white);
 }
+// TENNA_FLAG_EDITOR_DRAW_END
 ";
 
 var clampFuncName = "scr_tenna_fe_clamp";
@@ -257,8 +267,8 @@ else
 string clampFuncBody = @"
 if (global._tenna_fe_flag_id < 0)
     global._tenna_fe_flag_id = 0;
-if (global._tenna_fe_flag_id > 2499)
-    global._tenna_fe_flag_id = 2499;
+if (global._tenna_fe_flag_id > global._tenna_fe_flag_max)
+    global._tenna_fe_flag_id = global._tenna_fe_flag_max;
 global._tenna_fe_flag_id = floor(global._tenna_fe_flag_id);
 global._tenna_fe_flag_input = string(global._tenna_fe_flag_id);
 
@@ -297,12 +307,18 @@ importGroup.QueueReplace(applyCode, applyFuncBody);
 
 try
 {
-  if (!flagEditorAlreadyInstalled)
-  {
-    importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
-    importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
-    importGroup.QueueReplace(drawCode, GetDecompiledText(drawCode) + drawDisplay);
-  }
+  string currentStepText = GetDecompiledText(stepCode);
+  string currentDrawText = GetDecompiledText(drawCode);
+  string currentCreateText = GetDecompiledText(createCode);
+
+  string cleanCreate = TennaCleanAllBlocks(currentCreateText, "global._tenna_fe_enabled = true;", "global._tenna_fe_flag_max = array_length(global.flag) - 1;");
+  importGroup.QueueReplace(createCode, cleanCreate + createInit);
+
+  string cleanStep = TennaCleanAllBlocks(currentStepText, "keyboard_check_pressed(ord(\"4\"))", "global._tenna_fe_msg_timer--;");
+  importGroup.QueueReplace(stepCode, stepCheck + cleanStep);
+
+  string cleanDraw = TennaCleanAllBraceBlocks(currentDrawText, "global._tenna_fe_open");
+  importGroup.QueueReplace(drawCode, cleanDraw + drawDisplay);
   
   importGroup.Import();
   if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
@@ -311,4 +327,107 @@ try
 catch (Exception ex)
 {
   ScriptError($"Failed to install: {ex.Message}");
+}
+
+string TennaCleanBlock(string source, string startPattern, string endPattern)
+{
+  int startIdx = source.IndexOf(startPattern, StringComparison.Ordinal);
+  if (startIdx < 0)
+    return source;
+
+  int ifIdx = source.LastIndexOf("if", startIdx, StringComparison.Ordinal);
+  if (ifIdx >= 0 && startIdx - ifIdx < 15)
+    startIdx = ifIdx;
+
+  int endIdx = source.IndexOf(endPattern, startIdx, StringComparison.Ordinal);
+  if (endIdx < 0)
+    return source;
+
+  endIdx += endPattern.Length;
+
+  int braceCount = 0;
+  while (endIdx < source.Length)
+  {
+    char c = source[endIdx];
+    if (c == '\r' || c == '\n' || c == ' ')
+    {
+      endIdx++;
+    }
+    else if (c == '}' && braceCount < 3)
+    {
+      endIdx++;
+      braceCount++;
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  return source.Substring(0, startIdx) + source.Substring(endIdx);
+}
+
+string TennaCleanAllBlocks(string source, string startPattern, string endPattern)
+{
+  string current = source;
+  while (true)
+  {
+    string cleaned = TennaCleanBlock(current, startPattern, endPattern);
+    if (cleaned == current)
+      break;
+    current = cleaned;
+  }
+  return current;
+}
+
+string TennaCleanBraceBlock(string source, string startPattern)
+{
+  int startIdx = source.IndexOf(startPattern, StringComparison.Ordinal);
+  if (startIdx < 0)
+    return source;
+
+  int ifIdx = source.LastIndexOf("if", startIdx, StringComparison.Ordinal);
+  if (ifIdx >= 0 && startIdx - ifIdx < 15)
+    startIdx = ifIdx;
+
+  int braceIdx = source.IndexOf("{", startIdx, StringComparison.Ordinal);
+  if (braceIdx < 0)
+    return source;
+
+  int level = 1;
+  int scanIdx = braceIdx + 1;
+  while (scanIdx < source.Length && level > 0)
+  {
+    char c = source[scanIdx];
+    if (c == '{')
+      level++;
+    else if (c == '}')
+      level--;
+    scanIdx++;
+  }
+
+  if (level == 0)
+  {
+    int endIdx = scanIdx;
+    while (endIdx < source.Length && (source[endIdx] == '\r' || source[endIdx] == '\n' || source[endIdx] == ' '))
+    {
+      endIdx++;
+    }
+    return source.Substring(0, startIdx) + source.Substring(endIdx);
+  }
+
+  return source;
+}
+
+string TennaCleanAllBraceBlocks(string source, string startPattern)
+{
+  string current = source;
+  while (true)
+  {
+    string cleaned = TennaCleanBraceBlock(current, startPattern);
+    if (cleaned == current)
+      break;
+    current = cleaned;
+  }
+  return current;
 }

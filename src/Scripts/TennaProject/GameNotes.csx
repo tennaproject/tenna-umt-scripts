@@ -24,7 +24,7 @@ if (!checkCreate.Contains("_tenna_core_enabled"))
   return;
 }
 
-bool plotWatcherAlreadyInstalled = checkCreate.Contains("_tenna_pw_enabled");
+bool notesAlreadyInstalled = checkCreate.Contains("_tenna_notes_enabled");
 
 UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 {
@@ -32,67 +32,117 @@ UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 };
 
 string createInit = @"
-// TENNA_PLOT_WATCHER_CREATE_BEGIN
-_tenna_pw_enabled = true;
-_tenna_pw_visible = true;
-_tenna_pw_shadow = global.plot;
-_tenna_pw_notify_msg = """";
-_tenna_pw_notify_timer = 0;
-// TENNA_PLOT_WATCHER_CREATE_END
+// TENNA_NOTES_CREATE_BEGIN
+global._tenna_notes_enabled = true;
+global._tenna_notes_open = false;
+global._tenna_notes_text = """";
+global._tenna_notes_msg = """";
+global._tenna_notes_msg_timer = 0;
+// TENNA_NOTES_CREATE_END
 ";
 
 string stepCheck = @"
-// TENNA_PLOT_WATCHER_STEP_BEGIN
-if (keyboard_check_pressed(ord(""3"")) && keyboard_check(vk_alt))
-    _tenna_pw_visible = !_tenna_pw_visible;
-
-if (_tenna_pw_enabled)
+// TENNA_NOTES_STEP_BEGIN
+if (keyboard_check_pressed(ord(""N"")) && keyboard_check(vk_alt))
 {
-    if (global.plot != _tenna_pw_shadow)
+    global._tenna_notes_open = !global._tenna_notes_open;
+    keyboard_lastchar = """";
+    if (global._tenna_notes_open)
     {
-        var _tenna_pw_old = _tenna_pw_shadow;
-        var _tenna_pw_new = global.plot;
-        _tenna_pw_shadow = _tenna_pw_new;
-        
-        _tenna_pw_notify_msg = ""Plot: "" + string(_tenna_pw_old) + "" -> "" + string(_tenna_pw_new);
-        _tenna_pw_notify_timer = 180;
-        
-        scr_tenna_log(""PlotWatcher"", string(_tenna_pw_old) + "" -> "" + string(_tenna_pw_new));
+        global._tenna_notes_text = """";
+        instance_deactivate_all(true);
+        instance_activate_object(obj_time);
+        instance_activate_object(obj_gamecontroller);
     }
-    
-    if (_tenna_pw_notify_timer > 0)
-        _tenna_pw_notify_timer--;
+    else
+    {
+        instance_activate_all();
+    }
 }
-// TENNA_PLOT_WATCHER_STEP_END
+
+if (global._tenna_notes_open)
+{
+    if (keyboard_check_pressed(vk_escape))
+    {
+        instance_activate_all();
+        global._tenna_notes_open = false;
+        keyboard_lastchar = """";
+    }
+    else if (keyboard_check_pressed(vk_backspace))
+    {
+        if (string_length(global._tenna_notes_text) > 0)
+            global._tenna_notes_text = string_copy(global._tenna_notes_text, 1, string_length(global._tenna_notes_text) - 1);
+        keyboard_lastchar = """";
+    }
+    else if (keyboard_check_pressed(vk_enter))
+    {
+        if (string_length(global._tenna_notes_text) > 0)
+        {
+            scr_tenna_log(""Note"", global._tenna_notes_text);
+            global._tenna_notes_msg = ""Logged note: "" + global._tenna_notes_text;
+            global._tenna_notes_msg_timer = 150;
+            global._tenna_notes_text = """";
+            instance_activate_all();
+            global._tenna_notes_open = false;
+        }
+        keyboard_lastchar = """";
+    }
+    else
+    {
+        var _k = keyboard_lastchar;
+        if (_k != """")
+        {
+            var _c = ord(_k);
+            if (_c >= 32 && _c <= 126 && string_length(global._tenna_notes_text) < 120)
+                global._tenna_notes_text += _k;
+            keyboard_lastchar = """";
+        }
+    }
+}
+
+if (global._tenna_notes_msg_timer > 0)
+    global._tenna_notes_msg_timer -= 1;
+// TENNA_NOTES_STEP_END
 ";
 
 string drawDisplay = @"
-// TENNA_PLOT_WATCHER_DRAW_BEGIN
-if (_tenna_pw_visible)
+// TENNA_NOTES_DRAW_BEGIN
+if (global._tenna_notes_open)
 {
-    draw_set_font(fnt_main);
-    draw_set_halign(fa_left);
-    
-    var _tenna_pw_text = ""Plot: "" + string(global.plot);
+    draw_set_alpha(0.85);
     draw_set_color(c_black);
-    draw_text(9, 9, _tenna_pw_text);
-    draw_set_color(c_lime);
-    draw_text(8, 8, _tenna_pw_text);
+    draw_rectangle(80, 155, 560, 300, false);
+    draw_set_alpha(1);
     
-    if (_tenna_pw_notify_timer > 0)
-    {
-        var _tenna_pw_alpha = _tenna_pw_notify_timer / 180;
-        draw_set_alpha(_tenna_pw_alpha);
-        draw_set_color(c_black);
-        draw_text(9, 23, _tenna_pw_notify_msg);
-        draw_set_color(c_red);
-        draw_text(8, 22, _tenna_pw_notify_msg);
-        draw_set_alpha(1);
-    }
+    draw_set_font(fnt_main);
+    draw_set_halign(fa_center);
+    draw_set_color(c_white);
+    draw_text(320, 172, ""TENNA NOTE"");
     
+    draw_set_halign(fa_left);
+    draw_set_color(c_yellow);
+    draw_text(110, 215, global._tenna_notes_text + ""_"");
+    
+    draw_set_color(c_gray);
+    draw_text(110, 260, ""Enter logs note  |  Esc cancels  |  Backspace deletes"");
+    draw_set_halign(fa_left);
     draw_set_color(c_white);
 }
-// TENNA_PLOT_WATCHER_DRAW_END
+
+if (global._tenna_notes_msg_timer > 0)
+{
+    draw_set_font(fnt_main);
+    draw_set_halign(fa_center);
+    draw_set_alpha(min(1, global._tenna_notes_msg_timer / 30));
+    draw_set_color(c_black);
+    draw_text(321, 401, global._tenna_notes_msg);
+    draw_set_color(c_lime);
+    draw_text(320, 400, global._tenna_notes_msg);
+    draw_set_alpha(1);
+    draw_set_halign(fa_left);
+    draw_set_color(c_white);
+}
+// TENNA_NOTES_DRAW_END
 ";
 
 try
@@ -101,18 +151,18 @@ try
   string currentDrawText = GetDecompiledText(drawCode);
   string currentCreateText = GetDecompiledText(createCode);
 
-  string cleanCreate = TennaCleanAllBlocks(currentCreateText, "_tenna_pw_enabled = true;", "_tenna_pw_notify_timer = 0;");
-  importGroup.QueueReplace(createCode, cleanCreate + createInit);
+  string cleanCreate = TennaCleanAllBlocks(currentCreateText, "global._tenna_notes_enabled = true;", "global._tenna_notes_msg_timer = 0;");
+  importGroup.QueueReplace(createCode, createInit + cleanCreate);
 
-  string cleanStep = TennaCleanAllBlocks(currentStepText, "keyboard_check_pressed(ord(\"3\"))", "_tenna_pw_notify_timer--;");
+  string cleanStep = TennaCleanAllBlocks(currentStepText, "keyboard_check_pressed(ord(\"N\"))", "global._tenna_notes_msg_timer -= 1;");
   importGroup.QueueReplace(stepCode, stepCheck + cleanStep);
 
-  string cleanDraw = TennaCleanAllBraceBlocks(currentDrawText, "_tenna_pw_visible");
+  string cleanDraw = TennaCleanAllBraceBlocks(currentDrawText, "global._tenna_notes_open");
   importGroup.QueueReplace(drawCode, cleanDraw + drawDisplay);
   
   importGroup.Import();
   if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
-    ScriptMessage("Plot Watcher " + (plotWatcherAlreadyInstalled ? "updated" : "installed") + "!\n\nAlt+3 to toggle display.");
+    ScriptMessage("Notes " + (notesAlreadyInstalled ? "updated" : "installed") + "!\n\nAlt+N opens the note prompt.");
 }
 catch (Exception ex)
 {

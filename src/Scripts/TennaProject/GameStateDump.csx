@@ -27,14 +27,18 @@ UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 };
 
 string createInit = @"
+// TENNA_STATE_DUMP_CREATE_BEGIN
 global._tenna_sd_enabled = true;
 directory_create(""tenna"");
 directory_create(""tenna/state"");
+// TENNA_STATE_DUMP_CREATE_END
 ";
 
 string stepCheck = @"
+// TENNA_STATE_DUMP_STEP_BEGIN
 if (keyboard_check_pressed(ord(""5"")) && keyboard_check(vk_alt))
     scr_tenna_state_dump();
+// TENNA_STATE_DUMP_STEP_END
 ";
 
 var dumpFuncName = "scr_tenna_state_dump";
@@ -144,7 +148,10 @@ file_text_writeln(_f);
 
 file_text_write_string(_f, ""  "" + _q + ""flagsNonZero"" + _q + "": ["");
 var _first = true;
-for (var _i = 0; _i < 2500; _i++)
+var _flag_count = 2500;
+if (variable_global_exists(""flag"") && is_array(global.flag))
+    _flag_count = array_length(global.flag);
+for (var _i = 0; _i < _flag_count; _i++)
 {
     if (global.flag[_i] != 0)
     {
@@ -258,11 +265,14 @@ importGroup.QueueReplace(writeArrayCode, writeArrayFuncBody);
 
 try
 {
-  if (!stateDumpAlreadyInstalled)
-  {
-    importGroup.QueueReplace(createCode, GetDecompiledText(createCode) + createInit);
-    importGroup.QueueReplace(stepCode, GetDecompiledText(stepCode) + stepCheck);
-  }
+  string currentStepText = GetDecompiledText(stepCode);
+  string currentCreateText = GetDecompiledText(createCode);
+
+  string cleanCreate = TennaCleanAllBlocks(currentCreateText, "global._tenna_sd_enabled = true;", "directory_create(\"tenna/state\");");
+  importGroup.QueueReplace(createCode, cleanCreate + createInit);
+
+  string cleanStep = TennaCleanAllBlocks(currentStepText, "keyboard_check_pressed(ord(\"5\"))", "scr_tenna_sd_dump();");
+  importGroup.QueueReplace(stepCode, stepCheck + cleanStep);
   
   importGroup.Import();
   if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
@@ -272,3 +282,55 @@ catch (Exception ex)
 {
   ScriptError($"Failed to install: {ex.Message}");
 }
+
+string TennaCleanBlock(string source, string startPattern, string endPattern)
+{
+  int startIdx = source.IndexOf(startPattern, StringComparison.Ordinal);
+  if (startIdx < 0)
+    return source;
+
+  int ifIdx = source.LastIndexOf("if", startIdx, StringComparison.Ordinal);
+  if (ifIdx >= 0 && startIdx - ifIdx < 15)
+    startIdx = ifIdx;
+
+  int endIdx = source.IndexOf(endPattern, startIdx, StringComparison.Ordinal);
+  if (endIdx < 0)
+    return source;
+
+  endIdx += endPattern.Length;
+
+  int braceCount = 0;
+  while (endIdx < source.Length)
+  {
+    char c = source[endIdx];
+    if (c == '\r' || c == '\n' || c == ' ')
+    {
+      endIdx++;
+    }
+    else if (c == '}' && braceCount < 3)
+    {
+      endIdx++;
+      braceCount++;
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  return source.Substring(0, startIdx) + source.Substring(endIdx);
+}
+
+string TennaCleanAllBlocks(string source, string startPattern, string endPattern)
+{
+  string current = source;
+  while (true)
+  {
+    string cleaned = TennaCleanBlock(current, startPattern, endPattern);
+    if (cleaned == current)
+      break;
+    current = cleaned;
+  }
+  return current;
+}
+
