@@ -29,10 +29,10 @@ Tenna Core v0.0.098 2026-02-04_21-24-25
 ### GameFlagWatcher.csx
 ![flagwatcher](/assets/flagwatcher.png)
 
-Displays flag changes in the top-right corner and records flag deltas with room, plot, and chapter context.
+Hooks all flag writes at the code level using compile-time GML injection. Displays changes in the top-right corner and records flag deltas with room, plot, and chapter context.
 
-**Hotkey:** Alt+2 to toggle display  
-**Ignores:** flags 21, 33
+**Hotkey:** Alt+2 to toggle display
+**Ignores:** flags 20, 21, 33
 
 ### GamePlotWatcher.csx
 ![plotwatcher](/assets/plotwatcher.png)
@@ -78,6 +78,7 @@ Run `DataAll.csx` to pick export categories and choose the output folder once. R
 | `DataExportRooms.csx` | `rooms.json` |
 | `DataExportSpells.csx` | `spells.json` |
 | `DataExportEnemies.csx` | `enemies.json` |
+| `DataExportCharacters.csx` | `characters.json` |
 
 ## License
 

@@ -49,7 +49,10 @@ bool TennaExportEnemies(string exportDir)
     return false;
   }
 
-  TennaWriteEnemyJson(GetDecompiledText(source), exportDir);
+  UndertaleCode recruitInfoSource = TennaGetRequiredScriptCode("scr_recruit_info");
+  string recruitInfoText = recruitInfoSource != null ? GetDecompiledText(recruitInfoSource) : null;
+
+  TennaWriteEnemyJson(GetDecompiledText(source), recruitInfoText, exportDir);
   return true;
 }
 
@@ -76,10 +79,11 @@ string TennaWriteMissingSourceDiagnostic(string scriptName, string sourceName, s
   return outputPath;
 }
 
-void TennaWriteEnemyJson(string text, string exportDir)
+void TennaWriteEnemyJson(string text, string recruitInfoText, string exportDir)
 {
   string outputPath = Path.Combine(exportDir, "enemies.json");
   List<TennaEnemy> enemies = TennaParseEnemies(text);
+  Dictionary<int, TennaRecruitInfo> recruitDict = TennaParseRecruitInfos(recruitInfoText);
 
   using (StreamWriter writer = new StreamWriter(outputPath, false))
   {
@@ -95,7 +99,30 @@ void TennaWriteEnemyJson(string text, string exportDir)
       writer.WriteLine("  " + TennaJson(constantName) + ": {");
       writer.WriteLine("    \"id\": " + enemy.Id + ",");
       writer.WriteLine("    \"name\": " + TennaJson(enemy.Name) + ",");
-      writer.WriteLine("    \"recruitFlag\": " + (enemy.Id + 600) + ",");
+
+      TennaRecruitInfo recruit = null;
+      if (recruitDict != null)
+        recruitDict.TryGetValue(enemy.Id, out recruit);
+
+      if (recruit != null)
+      {
+        writer.WriteLine("    \"isRecruitable\": true,");
+        writer.WriteLine("    \"recruitName\": " + TennaJson(recruit.Name) + ",");
+        writer.WriteLine("    \"recruitFlag\": " + (enemy.Id + 600) + ",");
+        writer.WriteLine("    \"recruitChapter\": " + (recruit.Chapter.HasValue ? recruit.Chapter.Value.ToString() : "null") + ",");
+        writer.WriteLine("    \"recruitLevel\": " + TennaJson(recruit.Level) + ",");
+        writer.WriteLine("    \"recruitAttack\": " + (recruit.Attack.HasValue ? recruit.Attack.Value.ToString() : "null") + ",");
+        writer.WriteLine("    \"recruitDefense\": " + (recruit.Defense.HasValue ? recruit.Defense.Value.ToString() : "null") + ",");
+        writer.WriteLine("    \"recruitElement\": " + TennaJson(recruit.Element) + ",");
+        writer.WriteLine("    \"recruitCount\": " + recruit.RecruitCount + ",");
+        writer.WriteLine("    \"recruitDesc\": " + TennaJson(recruit.Desc) + ",");
+      }
+      else
+      {
+        writer.WriteLine("    \"isRecruitable\": false,");
+        writer.WriteLine("    \"recruitFlag\": null,");
+      }
+
       TennaWriteNullableInt(writer, "hp", enemy.Hp, true);
       TennaWriteNullableInt(writer, "attack", enemy.Attack, true);
       TennaWriteNullableInt(writer, "defense", enemy.Defense, true);
@@ -309,6 +336,133 @@ string TennaJson(string value)
     else output += c;
   }
   return output + "\"";
+}
+
+class TennaRecruitInfo
+{
+  public int Id;
+  public string Name;
+  public string Desc;
+  public int? Chapter;
+  public string Element;
+  public string Level;
+  public int? Attack;
+  public int? Defense;
+  public int RecruitCount = 1;
+}
+
+Dictionary<int, TennaRecruitInfo> TennaParseRecruitInfos(string text)
+{
+  Dictionary<int, TennaRecruitInfo> dict = new Dictionary<int, TennaRecruitInfo>();
+  if (string.IsNullOrEmpty(text))
+    return dict;
+
+  TennaRecruitInfo current = null;
+  using (StringReader reader = new StringReader(text))
+  {
+    string line;
+    while ((line = reader.ReadLine()) != null)
+    {
+      string trimmed = line.Trim();
+      if (trimmed.StartsWith("case "))
+      {
+        int colon = trimmed.IndexOf(':');
+        if (colon > 0)
+        {
+          string numStr = trimmed.Substring(5, colon - 5).Trim();
+          int id;
+          if (int.TryParse(numStr, out id))
+          {
+            current = new TennaRecruitInfo { Id = id };
+            dict[id] = current;
+          }
+        }
+        continue;
+      }
+
+      if (current == null)
+        continue;
+
+      if (trimmed.StartsWith("break;"))
+      {
+        current = null;
+        continue;
+      }
+
+      int equals = trimmed.IndexOf('=');
+      if (equals > 0)
+      {
+        string left = trimmed.Substring(0, equals).Trim();
+        string right = trimmed.Substring(equals + 1).Trim().TrimEnd(';');
+
+        if (left == "_name")
+          current.Name = TennaExtractStringValue(right);
+        else if (left == "_desc")
+          current.Desc = TennaExtractStringValue(right);
+        else if (left == "_element")
+          current.Element = TennaExtractStringValue(right);
+        else if (left == "_level")
+          current.Level = TennaExtractStringValueOrInt(right);
+        else if (left == "_chapter")
+          current.Chapter = TennaParseInt(right);
+        else if (left == "_attack")
+          current.Attack = TennaParseInt(right);
+        else if (left == "_defense")
+          current.Defense = TennaParseInt(right);
+        else if (left == "_recruitcount")
+        {
+          int? rc = TennaParseInt(right);
+          if (rc.HasValue)
+            current.RecruitCount = rc.Value;
+        }
+      }
+    }
+  }
+
+  return dict;
+}
+
+string TennaExtractStringValue(string right)
+{
+  right = right.Trim();
+  if (right.StartsWith("stringsetloc("))
+  {
+    int start = right.IndexOf('"');
+    if (start >= 0)
+    {
+      int end = right.IndexOf('"', start + 1);
+      if (end >= 0)
+        return right.Substring(start + 1, end - start - 1);
+    }
+  }
+  else
+  {
+    int start = right.IndexOf('"');
+    if (start >= 0)
+    {
+      int end = right.IndexOf('"', start + 1);
+      if (end >= 0)
+        return right.Substring(start + 1, end - start - 1);
+    }
+  }
+  return right.Trim('"');
+}
+
+string TennaExtractStringValueOrInt(string right)
+{
+  right = right.Trim();
+  if (right.Contains("\""))
+    return TennaExtractStringValue(right);
+  return right;
+}
+
+int? TennaParseInt(string right)
+{
+  right = right.Trim();
+  int val;
+  if (int.TryParse(right, out val))
+    return val;
+  return null;
 }
 
 class TennaEnemy

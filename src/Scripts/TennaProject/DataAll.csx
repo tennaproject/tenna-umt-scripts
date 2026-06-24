@@ -13,6 +13,7 @@ string[] exportLabels = new string[] {
   "Rooms",
   "Spells",
   "Enemies",
+  "Characters",
 };
 
 string[] exportFiles = new string[] {
@@ -24,9 +25,11 @@ string[] exportFiles = new string[] {
   "DataExportRooms.csx",
   "DataExportSpells.csx",
   "DataExportEnemies.csx",
+  "DataExportCharacters.csx",
 };
 
 bool[] defaultSelected = new bool[] {
+  true,
   true,
   true,
   true,
