@@ -151,6 +151,7 @@ var _elapsed = argument5;
 var _chapter = argument6;
 var _room = argument7;
 var _plot = argument8;
+var _has_bitmask = argument_count > 9;
 var _row = ds_map_create();
 
 ds_map_add(_row, ""event"", _event);
@@ -169,6 +170,13 @@ else
 ds_map_add(_row, ""chapter"", _chapter);
 ds_map_add(_row, ""room"", _room);
 ds_map_add(_row, ""plot"", _plot);
+if (_has_bitmask)
+{
+    ds_map_add(_row, ""bitIndex"", argument9);
+    ds_map_add(_row, ""bitWidth"", argument10);
+    ds_map_add(_row, ""oldBitValue"", argument11);
+    ds_map_add(_row, ""newBitValue"", argument12);
+}
 file_text_write_string(_file, json_encode(_row));
 file_text_writeln(_file);
 ds_map_destroy(_row);
@@ -263,6 +271,143 @@ return 0;
 ";
 importGroup.QueueReplace(flagSetCode, flagSetBody);
 
+var flagSetBitmaskFunctionName = "scr_tenna_flag_set_bitmask";
+UndertaleCode flagSetBitmaskCode;
+if (Data.Scripts.ByName(flagSetBitmaskFunctionName)?.Code is UndertaleCode existingFlagSetBitmaskCode)
+{
+  flagSetBitmaskCode = existingFlagSetBitmaskCode;
+}
+else
+{
+  flagSetBitmaskCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + flagSetBitmaskFunctionName) };
+  Data.Code.Add(flagSetBitmaskCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(flagSetBitmaskFunctionName), Code = flagSetBitmaskCode };
+  Data.Scripts.Add(scriptEntry);
+}
+
+string flagSetBitmaskBody = @"
+var _index = argument0;
+var _bit_index = argument1;
+var _bit_value = argument2;
+var _bit_width = 1;
+if (argument_count > 3)
+    _bit_width = argument3;
+
+if (_bit_index < 0)
+    return scr_tenna_flag_set(_index, _bit_value);
+
+var _len = 0;
+if (variable_global_exists(""flag"") && is_array(global.flag))
+    _len = array_length(global.flag);
+
+var _old = 0;
+if (_index < _len)
+    _old = global.flag[_index];
+
+var _max_bit_value = power(2, _bit_width) - 1;
+var _bit_offset = _bit_index * _bit_width;
+var _old_bit_value = (_old >> _bit_offset) & _max_bit_value;
+var _clamped_bit_value = clamp(floor(_bit_value), 0, _max_bit_value);
+var _value = _old;
+_value &= ~(_max_bit_value << _bit_offset);
+_value |= ((_clamped_bit_value & _max_bit_value) << _bit_offset);
+var _new_bit_value = (_value >> _bit_offset) & _max_bit_value;
+
+global.flag[_index] = _value;
+
+if (!variable_global_exists(""_tenna_core_enabled"") || !global._tenna_core_enabled)
+    return 0;
+
+if (variable_global_exists(""_tenna_loading_save"") && global._tenna_loading_save)
+    return 0;
+
+if (variable_global_exists(""_tenna_fw_frame_writes""))
+{
+    global._tenna_fw_frame_writes++;
+    if (global._tenna_fw_frame_writes > 50)
+    {
+        global._tenna_loading_save = true;
+        return 0;
+    }
+}
+
+if (_index == 6 || _index == 20 || _index == 21 || _index == 33)
+    return 0;
+
+if (_old == _value)
+{
+    if (_index < 900 || _index > 911)
+        return 0;
+}
+
+var _tenna_fw_room = -1;
+if (variable_global_exists(""currentroom""))
+    _tenna_fw_room = global.currentroom;
+var _tenna_fw_plot = -1;
+if (variable_global_exists(""plot""))
+    _tenna_fw_plot = global.plot;
+var _tenna_fw_chapter = -1;
+if (variable_global_exists(""chapter""))
+    _tenna_fw_chapter = global.chapter;
+
+var _tenna_fw_elapsed = (current_time - global._tenna_core_start_time) / 1000;
+var _tenna_fw_file = file_text_open_append(global._tenna_fw_export_filename);
+
+scr_tenna_fw_write_row(_tenna_fw_file, ""change"", _index, _old, _value, _tenna_fw_elapsed, _tenna_fw_chapter, _tenna_fw_room, _tenna_fw_plot, _bit_index, _bit_width, _old_bit_value, _new_bit_value);
+file_text_close(_tenna_fw_file);
+
+scr_tenna_log(""FlagWatcher"", ""["" + string(_index) + "":"" + string(_bit_index) + ""w"" + string(_bit_width) + ""]: "" + string(_old_bit_value) + "" -> "" + string(_new_bit_value) + "" parent="" + string(_old) + "" -> "" + string(_value) + "" room="" + string(_tenna_fw_room) + "" plot="" + string(_tenna_fw_plot));
+
+if (instance_exists(obj_time))
+{
+    with (obj_time)
+    {
+        for (var _tenna_fw_j = _tenna_fw_max_log - 1; _tenna_fw_j > 0; _tenna_fw_j--)
+        {
+            _tenna_fw_log[_tenna_fw_j] = _tenna_fw_log[_tenna_fw_j - 1];
+            _tenna_fw_alpha[_tenna_fw_j] = _tenna_fw_alpha[_tenna_fw_j - 1];
+        }
+        _tenna_fw_log[0] = ""Flag["" + string(_index) + "":"" + string(_bit_index) + ""w"" + string(_bit_width) + ""]: "" + string(_old_bit_value) + "" -> "" + string(_new_bit_value);
+        _tenna_fw_alpha[0] = 1;
+    }
+}
+return 0;
+";
+importGroup.QueueReplace(flagSetBitmaskCode, flagSetBitmaskBody);
+
+bool flagSetExtUpdated = false;
+List<UndertaleCode> flagSetExtCandidates = new List<UndertaleCode>();
+if (Data.Code.ByName("gml_GlobalScript_scr_flag_set") is UndertaleCode globalFlagSetCode)
+  flagSetExtCandidates.Add(globalFlagSetCode);
+if (Data.Scripts.ByName("scr_flag_set_ext")?.Code is UndertaleCode scriptFlagSetExtCode && !flagSetExtCandidates.Contains(scriptFlagSetExtCode))
+  flagSetExtCandidates.Add(scriptFlagSetExtCode);
+foreach (var code in Data.Code)
+{
+  string codeName = code.Name.Content;
+  if (codeName.Contains("scr_flag_set") && !flagSetExtCandidates.Contains(code))
+    flagSetExtCandidates.Add(code);
+}
+
+foreach (var code in flagSetExtCandidates)
+{
+  string flagSetExtText = GetDecompiledText(code);
+  if (!flagSetExtText.Contains("function scr_flag_set_ext"))
+    continue;
+
+  string flagSetExtBody = @"
+function scr_flag_set_ext(arg0, arg1, arg2, arg3 = 1)
+{
+    return scr_tenna_flag_set_bitmask(arg0, arg1, arg2, arg3);
+}
+";
+  string updatedFlagSetExtText = ReplaceNamedFunction(flagSetExtText, "scr_flag_set_ext", flagSetExtBody);
+  if (updatedFlagSetExtText != flagSetExtText)
+  {
+    importGroup.QueueReplace(code, updatedFlagSetExtText);
+    flagSetExtUpdated = true;
+  }
+}
+
 try
 {
   string currentStepText = GetDecompiledText(stepCode);
@@ -298,7 +443,7 @@ try
     if (code.Name.Content == "gml_Object_obj_time_Create_0" || code.Name.Content == "gml_Object_obj_time_Step_1" || code.Name.Content == "gml_Object_obj_time_Draw_64")
       continue;
 
-    if (!ReferencesFlag(code))
+    if (!WritesFlag(code))
       continue;
 
     string originalText = GetDecompiledText(code);
@@ -339,6 +484,10 @@ try
   if (Environment.GetEnvironmentVariable("TENNA_UMT_SUPPRESS_SCRIPT_MESSAGES") != "1")
   {
     string msg = "Flag Watcher " + (flagWatcherAlreadyInstalled ? "updated" : "installed") + "!\n\nAlt+2 to toggle display.\nSuccessfully hooked: " + hookedCount + " scripts.";
+    if (flagSetExtUpdated)
+      msg += "\nBitmask flag helper updated.";
+    else
+      msg += "\nWarning: scr_flag_set_ext was not found; wrapper bitmask writes may display as raw parent flags.";
     if (failedCount > 0)
       msg += "\n\nWarning: " + failedCount + " scripts failed compilation and were skipped.\nDetails written to tenna/flag-watcher-errors.txt";
     ScriptMessage(msg);
@@ -351,6 +500,8 @@ catch (Exception ex)
 
 string HookFlagAssignments(string codeText)
 {
+  codeText = HookExistingBitmaskFlagSetCalls(codeText);
+
   int index = 0;
   while (true)
   {
@@ -465,7 +616,9 @@ string HookFlagAssignments(string codeText)
     string replacement = "";
     if (op == "=")
     {
-      replacement = $"scr_tenna_flag_set({indexExpr}, {valueExpr})";
+      replacement = BuildBitmaskSetReplacement(indexExpr, valueExpr);
+      if (replacement == "")
+        replacement = $"scr_tenna_flag_set({indexExpr}, {valueExpr})";
     }
     else if (op == "++")
     {
@@ -500,6 +653,258 @@ string HookFlagAssignments(string codeText)
     index += fullReplacement.Length;
   }
   return codeText;
+}
+
+string HookExistingBitmaskFlagSetCalls(string codeText)
+{
+  string callName = "scr_tenna_flag_set";
+  int index = 0;
+  while (true)
+  {
+    index = FindNextCodeText(codeText, callName + "(", index);
+    if (index < 0)
+      break;
+
+    int openParen = codeText.IndexOf('(', index + callName.Length);
+    if (openParen < 0)
+      break;
+
+    int closeParen = FindMatchingParen(codeText, openParen);
+    if (closeParen < 0)
+    {
+      index += callName.Length;
+      continue;
+    }
+
+    List<string> args = SplitTopLevelArguments(codeText.Substring(openParen + 1, closeParen - openParen - 1));
+    if (args.Count != 2)
+    {
+      index = closeParen + 1;
+      continue;
+    }
+
+    string replacement = BuildBitmaskSetReplacement(args[0].Trim(), args[1].Trim());
+    if (replacement == "")
+    {
+      index = closeParen + 1;
+      continue;
+    }
+
+    int originalLength = closeParen + 1 - index;
+    codeText = codeText.Substring(0, index) + replacement + codeText.Substring(index + originalLength);
+    index += replacement.Length;
+  }
+
+  return codeText;
+}
+
+string BuildBitmaskSetReplacement(string indexExpr, string valueExpr)
+{
+  string callName = "scr_set_bitmask_value";
+  string trimmed = valueExpr.Trim();
+  if (!trimmed.StartsWith(callName + "(", StringComparison.Ordinal))
+    return "";
+
+  int openParen = trimmed.IndexOf('(');
+  int closeParen = FindMatchingParen(trimmed, openParen);
+  if (closeParen != trimmed.Length - 1)
+    return "";
+
+  List<string> args = SplitTopLevelArguments(trimmed.Substring(openParen + 1, closeParen - openParen - 1));
+  if (args.Count < 3 || args.Count > 4)
+    return "";
+
+  string targetFlagExpr = ExtractGlobalFlagIndex(args[0]);
+  if (targetFlagExpr == "")
+    return "";
+
+  string normalizedTarget = RemoveWhitespace(targetFlagExpr);
+  string normalizedIndex = RemoveWhitespace(indexExpr);
+  if (normalizedTarget != normalizedIndex)
+    return "";
+
+  string widthExpr = args.Count >= 4 ? args[3].Trim() : "1";
+  return $"scr_tenna_flag_set_bitmask({indexExpr}, {args[1].Trim()}, {args[2].Trim()}, {widthExpr})";
+}
+
+string ExtractGlobalFlagIndex(string expr)
+{
+  string trimmed = expr.Trim();
+  if (!trimmed.StartsWith("global.flag", StringComparison.Ordinal))
+    return "";
+
+  int openBracket = trimmed.IndexOf('[', "global.flag".Length);
+  if (openBracket < 0)
+    return "";
+
+  int closeBracket = FindMatchingBracket(trimmed, openBracket);
+  if (closeBracket != trimmed.Length - 1)
+    return "";
+
+  return trimmed.Substring(openBracket + 1, closeBracket - openBracket - 1).Trim();
+}
+
+List<string> SplitTopLevelArguments(string source)
+{
+  List<string> args = new List<string>();
+  int start = 0;
+  int parenCount = 0;
+  int bracketCount = 0;
+  int curlyCount = 0;
+
+  for (int scan = 0; scan < source.Length; scan++)
+  {
+    char c = source[scan];
+    if (IsStringStart(source, scan))
+    {
+      scan = SkipStringLiteral(source, scan) - 1;
+      continue;
+    }
+
+    if (c == '(') parenCount++;
+    else if (c == ')') parenCount--;
+    else if (c == '[') bracketCount++;
+    else if (c == ']') bracketCount--;
+    else if (c == '{') curlyCount++;
+    else if (c == '}') curlyCount--;
+    else if (c == ',' && parenCount == 0 && bracketCount == 0 && curlyCount == 0)
+    {
+      args.Add(source.Substring(start, scan - start).Trim());
+      start = scan + 1;
+    }
+  }
+
+  args.Add(source.Substring(start).Trim());
+  return args;
+}
+
+int FindMatchingParen(string source, int openParen)
+{
+  int level = 1;
+  int scan = openParen + 1;
+  while (scan < source.Length && level > 0)
+  {
+    char c = source[scan];
+    if (IsStringStart(source, scan))
+    {
+      scan = SkipStringLiteral(source, scan);
+      continue;
+    }
+
+    if (c == '(')
+      level++;
+    else if (c == ')')
+      level--;
+
+    if (level > 0)
+      scan++;
+  }
+
+  return level == 0 ? scan : -1;
+}
+
+int FindMatchingBracket(string source, int openBracket)
+{
+  int level = 1;
+  int scan = openBracket + 1;
+  while (scan < source.Length && level > 0)
+  {
+    char c = source[scan];
+    if (IsStringStart(source, scan))
+    {
+      scan = SkipStringLiteral(source, scan);
+      continue;
+    }
+
+    if (c == '[')
+      level++;
+    else if (c == ']')
+      level--;
+
+    if (level > 0)
+      scan++;
+  }
+
+  return level == 0 ? scan : -1;
+}
+
+string RemoveWhitespace(string value)
+{
+  System.Text.StringBuilder builder = new System.Text.StringBuilder();
+  foreach (char c in value)
+  {
+    if (!char.IsWhiteSpace(c))
+      builder.Append(c);
+  }
+  return builder.ToString();
+}
+
+int FindNextCodeText(string source, string needle, int startIndex)
+{
+  int scan = Math.Max(startIndex, 0);
+  while (scan < source.Length)
+  {
+    if (IsStringStart(source, scan))
+    {
+      scan = SkipStringLiteral(source, scan);
+      continue;
+    }
+
+    if (scan + 1 < source.Length && source[scan] == '/' && source[scan + 1] == '/')
+    {
+      scan = SkipLineComment(source, scan);
+      continue;
+    }
+
+    if (scan + 1 < source.Length && source[scan] == '/' && source[scan + 1] == '*')
+    {
+      scan = SkipBlockComment(source, scan);
+      continue;
+    }
+
+    if (scan + needle.Length <= source.Length && source.Substring(scan, needle.Length) == needle)
+      return scan;
+
+    scan++;
+  }
+
+  return -1;
+}
+
+string ReplaceNamedFunction(string source, string functionName, string replacement)
+{
+  string pattern = "function " + functionName;
+  int functionIndex = source.IndexOf(pattern, StringComparison.Ordinal);
+  if (functionIndex < 0)
+    return source;
+
+  int openBrace = source.IndexOf("{", functionIndex, StringComparison.Ordinal);
+  if (openBrace < 0)
+    return source;
+
+  int level = 1;
+  int scan = openBrace + 1;
+  while (scan < source.Length && level > 0)
+  {
+    char c = source[scan];
+    if (IsStringStart(source, scan))
+    {
+      scan = SkipStringLiteral(source, scan);
+      continue;
+    }
+
+    if (c == '{')
+      level++;
+    else if (c == '}')
+      level--;
+
+    scan++;
+  }
+
+  if (level != 0)
+    return source;
+
+  return source.Substring(0, functionIndex) + replacement + source.Substring(scan);
 }
 
 int FindNextCodeGlobalFlag(string source, int startIndex)
@@ -675,7 +1080,7 @@ string TennaCleanAllBraceBlocks(string source, string startPattern)
   return current;
 }
 
-bool ReferencesFlag(UndertaleCode code)
+bool WritesFlag(UndertaleCode code)
 {
   if (code.Instructions == null)
     return false;

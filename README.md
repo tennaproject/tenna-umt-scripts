@@ -30,9 +30,10 @@ Tenna Core v0.0.098 2026-02-04_21-24-25
 ![flagwatcher](/assets/flagwatcher.png)
 
 Hooks all flag writes at the code level using compile-time GML injection. Displays changes in the top-right corner and records flag deltas with room, plot, and chapter context.
+Bitmask writes are shown as decoded packed fields, for example `Flag[1843:1w4]: 0 -> 2`, while the JSONL row still includes the parent flag change.
 
 **Hotkey:** Alt+2 to toggle display
-**Ignores:** flags 20, 21, 33
+**Ignores:** flags 6, 20, 21, 33
 
 ### GamePlotWatcher.csx
 ![plotwatcher](/assets/plotwatcher.png)
