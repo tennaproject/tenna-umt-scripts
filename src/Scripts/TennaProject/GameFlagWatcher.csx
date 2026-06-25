@@ -287,7 +287,11 @@ try
   int failedCount = 0;
   List<string> errorLog = new List<string>();
 
+  List<UndertaleCode> codeSnapshot = new List<UndertaleCode>();
   foreach (var code in Data.Code)
+    codeSnapshot.Add(code);
+
+  foreach (var code in codeSnapshot)
   {
     if (code.Name.Content.StartsWith("gml_Script_scr_tenna_"))
       continue;
@@ -350,7 +354,7 @@ string HookFlagAssignments(string codeText)
   int index = 0;
   while (true)
   {
-    index = codeText.IndexOf("global.flag", index);
+    index = FindNextCodeGlobalFlag(codeText, index);
     if (index < 0)
       break;
 
@@ -366,6 +370,11 @@ string HookFlagAssignments(string codeText)
     while (closeBracket < codeText.Length && bracketCount > 0)
     {
       char c = codeText[closeBracket];
+      if (IsStringStart(codeText, closeBracket))
+      {
+        closeBracket = SkipStringLiteral(codeText, closeBracket);
+        continue;
+      }
       if (c == '[')
         bracketCount++;
       else if (c == ']')
@@ -429,6 +438,11 @@ string HookFlagAssignments(string codeText)
     while (endAssign < codeText.Length)
     {
       char c = codeText[endAssign];
+      if (IsStringStart(codeText, endAssign))
+      {
+        endAssign = SkipStringLiteral(codeText, endAssign);
+        continue;
+      }
       if (c == '(') parenCount++;
       else if (c == ')') parenCount--;
       else if (c == '{') curlyCount++;
@@ -486,6 +500,76 @@ string HookFlagAssignments(string codeText)
     index += fullReplacement.Length;
   }
   return codeText;
+}
+
+int FindNextCodeGlobalFlag(string source, int startIndex)
+{
+  int scan = Math.Max(startIndex, 0);
+  while (scan < source.Length)
+  {
+    if (IsStringStart(source, scan))
+    {
+      scan = SkipStringLiteral(source, scan);
+      continue;
+    }
+
+    if (scan + 1 < source.Length && source[scan] == '/' && source[scan + 1] == '/')
+    {
+      scan = SkipLineComment(source, scan);
+      continue;
+    }
+
+    if (scan + 1 < source.Length && source[scan] == '/' && source[scan + 1] == '*')
+    {
+      scan = SkipBlockComment(source, scan);
+      continue;
+    }
+
+    if (scan + "global.flag".Length <= source.Length && source.Substring(scan, "global.flag".Length) == "global.flag")
+      return scan;
+
+    scan++;
+  }
+
+  return -1;
+}
+
+bool IsStringStart(string source, int index)
+{
+  return index < source.Length && (source[index] == '"' || source[index] == '\'');
+}
+
+int SkipStringLiteral(string source, int quoteIndex)
+{
+  char quote = source[quoteIndex];
+  int scan = quoteIndex + 1;
+  while (scan < source.Length)
+  {
+    if (source[scan] == '\\')
+    {
+      scan += 2;
+      continue;
+    }
+
+    if (source[scan] == quote)
+      return scan + 1;
+
+    scan++;
+  }
+
+  return source.Length;
+}
+
+int SkipLineComment(string source, int commentIndex)
+{
+  int newline = source.IndexOf('\n', commentIndex + 2);
+  return newline < 0 ? source.Length : newline + 1;
+}
+
+int SkipBlockComment(string source, int commentIndex)
+{
+  int end = source.IndexOf("*/", commentIndex + 2, StringComparison.Ordinal);
+  return end < 0 ? source.Length : end + 2;
 }
 
 string TennaCleanBlock(string source, string startPattern, string endPattern)
