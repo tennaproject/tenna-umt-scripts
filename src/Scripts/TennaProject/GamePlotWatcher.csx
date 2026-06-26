@@ -23,6 +23,11 @@ if (!checkCreate.Contains("_tenna_core_enabled"))
   ScriptError("Tenna Core is required!\n\nPlease install GameCore.csx first.");
   return;
 }
+if (Data.Scripts.ByName("scr_tenna_config_set_plot_watcher_visible")?.Code is not UndertaleCode)
+{
+  ScriptError("Tenna Core needs to be updated before installing Plot Watcher.\n\nPlease run GameCore.csx first.");
+  return;
+}
 
 bool plotWatcherAlreadyInstalled = checkCreate.Contains("_tenna_pw_enabled");
 
@@ -34,7 +39,7 @@ UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
 string createInit = @"
 // TENNA_PLOT_WATCHER_CREATE_BEGIN
 _tenna_pw_enabled = true;
-_tenna_pw_visible = true;
+_tenna_pw_visible = global._tenna_config_ui_plot_watcher_visible;
 _tenna_pw_shadow = global.plot;
 _tenna_pw_notify_msg = """";
 _tenna_pw_notify_timer = 0;
@@ -44,7 +49,10 @@ _tenna_pw_notify_timer = 0;
 string stepCheck = @"
 // TENNA_PLOT_WATCHER_STEP_BEGIN
 if (keyboard_check_pressed(ord(""3"")) && keyboard_check(vk_alt))
+{
     _tenna_pw_visible = !_tenna_pw_visible;
+    scr_tenna_config_set_plot_watcher_visible(_tenna_pw_visible);
+}
 
 if (_tenna_pw_enabled)
 {
@@ -221,4 +229,3 @@ string TennaCleanAllBraceBlocks(string source, string startPattern)
   }
   return current;
 }
-

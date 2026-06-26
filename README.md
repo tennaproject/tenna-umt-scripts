@@ -10,12 +10,13 @@ A collection of [UndertaleModTool](https://github.com/UnderminersTeam/UndertaleM
 4. Choose the runtime tools to install. `GameCore.csx` is required and is always installed first.
 5. Save `data.win`, then launch the game.
 
-Run `GameAll.csx` again after script updates. The installers refresh their helper scripts without adding duplicate event hooks. Individual `Game*.csx` scripts can still be run manually.
+Run `GameAll.csx` again after script updates. The installers refresh their helper scripts and clean their own injected event blocks without adding duplicates. Individual `Game*.csx` scripts can still be run manually.
 
 ## Runtime Scripts
 
 ### GameCore.csx
 Base script required by the other runtime scripts. Shows version and elapsed time in the bottom-right corner and writes a log file to `tenna/logs/tenna-YYYY-MM-DD_HH-MM-SS.txt`.
+Creates `tenna/config.json` on first run. The config keeps overlay visibility persistent across sessions and provides shared runtime settings used by the other tools.
 
 ```
 Tenna Core v0.0.098 2026-02-04_21-24-25
@@ -30,10 +31,12 @@ Tenna Core v0.0.098 2026-02-04_21-24-25
 ![flagwatcher](/assets/flagwatcher.png)
 
 Hooks all flag writes at the code level using compile-time GML injection. Displays changes in the top-right corner and records flag deltas with room, plot, and chapter context.
-Bitmask writes are shown as decoded packed fields, for example `Flag[1843:1w4]: 0 -> 2`, while the JSONL row still includes the parent flag change.
+Bitmask writes are shown as decoded packed fields, for example `Flag[1843:1w4]: 0 -> 2`, while the JSONL row still includes the parent flag change. Array-packed writes show the changed slot when only one packed value changes, or an `arrayw<N>` summary when multiple slots change.
+Reinstall also upgrades known watcher-generated flag wrappers, including `scr_set_bitmask_value`, `scr_flag_set_ext`, and `scr_array_to_bitmask` forms. 
 
 **Hotkey:** Alt+2 to toggle display
-**Ignores:** flags 6, 20, 21, 33
+**Ignore last flag:** Alt+I toggles the most recently displayed flag between watched and ignored.
+**Ignores:** defaults to flags 6, 20, 21, 33. Edit `flagWatcher.ignoredFlags` in `tenna/config.json` to add or remove ignored flags.
 
 ### GamePlotWatcher.csx
 ![plotwatcher](/assets/plotwatcher.png)

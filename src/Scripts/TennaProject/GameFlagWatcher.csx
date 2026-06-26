@@ -23,6 +23,13 @@ if (!checkCreate.Contains("_tenna_core_enabled"))
   ScriptError("Tenna Core is required!\n\nPlease install GameCore.csx first.");
   return;
 }
+if (Data.Scripts.ByName("scr_tenna_config_flag_watcher_ignored")?.Code is not UndertaleCode
+  || Data.Scripts.ByName("scr_tenna_config_set_flag_watcher_visible")?.Code is not UndertaleCode
+  || Data.Scripts.ByName("scr_tenna_config_toggle_ignored_flag")?.Code is not UndertaleCode)
+{
+  ScriptError("Tenna Core needs to be updated before installing Flag Watcher.\n\nPlease run GameCore.csx first.");
+  return;
+}
 
 bool flagWatcherAlreadyInstalled = checkCreate.Contains("_tenna_fw_enabled");
 
@@ -35,12 +42,13 @@ string createInit = @"
 // TENNA_FLAG_WATCHER_CREATE_BEGIN
 _tenna_fw_max_log = 30;
 _tenna_fw_enabled = true;
-_tenna_fw_visible = true;
+_tenna_fw_visible = global._tenna_config_ui_flag_watcher_visible;
 directory_create(""tenna"");
 directory_create(""tenna/flag-logs"");
 global._tenna_fw_export_filename = ""tenna/flag-logs/flags-"" + global._tenna_core_ts + "".jsonl"";
 global._tenna_loading_save = false;
 global._tenna_fw_frame_writes = 0;
+global._tenna_fw_last_flag = -1;
 
 var _tenna_fw_room = -1;
 if (variable_global_exists(""currentroom""))
@@ -58,13 +66,13 @@ if (variable_global_exists(""flag"") && is_array(global.flag))
 {
     _tenna_fw_flag_count = array_length(global.flag);
     _tenna_fw_shadow = array_create(_tenna_fw_flag_count);
-    
+
     var _tenna_fw_file = file_text_open_append(global._tenna_fw_export_filename);
     for (var _tenna_fw_i = 0; _tenna_fw_i < _tenna_fw_flag_count; _tenna_fw_i++)
     {
         _tenna_fw_shadow[_tenna_fw_i] = global.flag[_tenna_fw_i];
 
-        if (_tenna_fw_i == 6 || _tenna_fw_i == 20 || _tenna_fw_i == 21 || _tenna_fw_i == 33)
+        if (scr_tenna_config_flag_watcher_ignored(_tenna_fw_i))
             continue;
 
         scr_tenna_fw_write_row(_tenna_fw_file, ""baseline"", _tenna_fw_i, 0, global.flag[_tenna_fw_i], 0, _tenna_fw_chapter, _tenna_fw_room, _tenna_fw_plot);
@@ -88,7 +96,23 @@ if (global._tenna_loading_save)
     global._tenna_loading_save = false;
 
 if (keyboard_check_pressed(ord(""2"")) && keyboard_check(vk_alt))
+{
     _tenna_fw_visible = !_tenna_fw_visible;
+    scr_tenna_config_set_flag_watcher_visible(_tenna_fw_visible);
+}
+
+if (keyboard_check_pressed(ord(""I"")) && keyboard_check(vk_alt) && global._tenna_fw_last_flag >= 0)
+{
+    var _tenna_fw_ignored = scr_tenna_config_toggle_ignored_flag(global._tenna_fw_last_flag);
+    scr_tenna_log(""FlagWatcher"", ""Flag["" + string(global._tenna_fw_last_flag) + ""] "" + (_tenna_fw_ignored ? ""ignored"" : ""watched""));
+    for (var _tenna_fw_j = _tenna_fw_max_log - 1; _tenna_fw_j > 0; _tenna_fw_j--)
+    {
+        _tenna_fw_log[_tenna_fw_j] = _tenna_fw_log[_tenna_fw_j - 1];
+        _tenna_fw_alpha[_tenna_fw_j] = _tenna_fw_alpha[_tenna_fw_j - 1];
+    }
+    _tenna_fw_log[0] = ""Flag["" + string(global._tenna_fw_last_flag) + ""] "" + (_tenna_fw_ignored ? ""ignored"" : ""watched"");
+    _tenna_fw_alpha[0] = 1;
+}
 
 if (_tenna_fw_enabled)
 {
@@ -174,8 +198,18 @@ if (_has_bitmask)
 {
     ds_map_add(_row, ""bitIndex"", argument9);
     ds_map_add(_row, ""bitWidth"", argument10);
-    ds_map_add(_row, ""oldBitValue"", argument11);
-    ds_map_add(_row, ""newBitValue"", argument12);
+    if (argument9 >= 0)
+    {
+        ds_map_add(_row, ""oldBitValue"", argument11);
+        ds_map_add(_row, ""newBitValue"", argument12);
+    }
+    else
+    {
+        if (argument_count > 13)
+            ds_map_add(_row, ""changedBitIndices"", argument13);
+        ds_map_add(_row, ""oldBitValues"", argument11);
+        ds_map_add(_row, ""newBitValues"", argument12);
+    }
 }
 file_text_write_string(_file, json_encode(_row));
 file_text_writeln(_file);
@@ -227,7 +261,7 @@ if (variable_global_exists(""_tenna_fw_frame_writes""))
     }
 }
 
-if (_index == 6 || _index == 20 || _index == 21 || _index == 33)
+if (scr_tenna_config_flag_watcher_ignored(_index))
     return 0;
 
 if (_old == _value)
@@ -258,6 +292,7 @@ if (instance_exists(obj_time))
 {
     with (obj_time)
     {
+        global._tenna_fw_last_flag = _index;
         for (var _tenna_fw_j = _tenna_fw_max_log - 1; _tenna_fw_j > 0; _tenna_fw_j--)
         {
             _tenna_fw_log[_tenna_fw_j] = _tenna_fw_log[_tenna_fw_j - 1];
@@ -331,7 +366,7 @@ if (variable_global_exists(""_tenna_fw_frame_writes""))
     }
 }
 
-if (_index == 6 || _index == 20 || _index == 21 || _index == 33)
+if (scr_tenna_config_flag_watcher_ignored(_index))
     return 0;
 
 if (_old == _value)
@@ -362,6 +397,7 @@ if (instance_exists(obj_time))
 {
     with (obj_time)
     {
+        global._tenna_fw_last_flag = _index;
         for (var _tenna_fw_j = _tenna_fw_max_log - 1; _tenna_fw_j > 0; _tenna_fw_j--)
         {
             _tenna_fw_log[_tenna_fw_j] = _tenna_fw_log[_tenna_fw_j - 1];
@@ -374,6 +410,148 @@ if (instance_exists(obj_time))
 return 0;
 ";
 importGroup.QueueReplace(flagSetBitmaskCode, flagSetBitmaskBody);
+
+var flagSetBitmaskArrayFunctionName = "scr_tenna_flag_set_bitmask_array";
+UndertaleCode flagSetBitmaskArrayCode;
+if (Data.Scripts.ByName(flagSetBitmaskArrayFunctionName)?.Code is UndertaleCode existingFlagSetBitmaskArrayCode)
+{
+  flagSetBitmaskArrayCode = existingFlagSetBitmaskArrayCode;
+}
+else
+{
+  flagSetBitmaskArrayCode = new UndertaleCode { Name = Data.Strings.MakeString("gml_Script_" + flagSetBitmaskArrayFunctionName) };
+  Data.Code.Add(flagSetBitmaskArrayCode);
+  var scriptEntry = new UndertaleScript { Name = Data.Strings.MakeString(flagSetBitmaskArrayFunctionName), Code = flagSetBitmaskArrayCode };
+  Data.Scripts.Add(scriptEntry);
+}
+
+string flagSetBitmaskArrayBody = @"
+var _index = argument0;
+var _values = argument1;
+var _bit_width = 1;
+if (argument_count > 2)
+    _bit_width = argument2;
+
+var _len = 0;
+if (variable_global_exists(""flag"") && is_array(global.flag))
+    _len = array_length(global.flag);
+
+var _old = 0;
+if (_index < _len)
+    _old = global.flag[_index];
+
+var _max_bit_value = power(2, _bit_width) - 1;
+var _slot_count = min(array_length(_values), floor(18 / _bit_width));
+var _value = 0;
+var _changed_count = 0;
+var _first_changed_index = -1;
+var _first_old_bit_value = 0;
+var _first_new_bit_value = 0;
+var _changed_indices = """";
+var _old_bit_values = """";
+var _new_bit_values = """";
+
+for (var _slot = 0; _slot < _slot_count; _slot++)
+{
+    var _raw_bit_value = _values[_slot];
+    var _new_slot_value = clamp(floor(_raw_bit_value), 0, _max_bit_value);
+    var _offset = _slot * _bit_width;
+    var _old_slot_value = (_old >> _offset) & _max_bit_value;
+    _value |= ((_new_slot_value & _max_bit_value) << _offset);
+
+    if (_old_slot_value != _new_slot_value)
+    {
+        if (_changed_count > 0)
+        {
+            _changed_indices += "","";
+            _old_bit_values += "","";
+            _new_bit_values += "","";
+        }
+        _changed_indices += string(_slot);
+        _old_bit_values += string(_old_slot_value);
+        _new_bit_values += string(_new_slot_value);
+
+        if (_changed_count == 0)
+        {
+            _first_changed_index = _slot;
+            _first_old_bit_value = _old_slot_value;
+            _first_new_bit_value = _new_slot_value;
+        }
+        _changed_count++;
+    }
+}
+
+global.flag[_index] = _value;
+
+if (!variable_global_exists(""_tenna_core_enabled"") || !global._tenna_core_enabled)
+    return 0;
+
+if (variable_global_exists(""_tenna_loading_save"") && global._tenna_loading_save)
+    return 0;
+
+if (variable_global_exists(""_tenna_fw_frame_writes""))
+{
+    global._tenna_fw_frame_writes++;
+    if (global._tenna_fw_frame_writes > 50)
+    {
+        global._tenna_loading_save = true;
+        return 0;
+    }
+}
+
+if (scr_tenna_config_flag_watcher_ignored(_index))
+    return 0;
+
+if (_old == _value)
+{
+    if (_index < 900 || _index > 911)
+        return 0;
+}
+
+var _tenna_fw_room = -1;
+if (variable_global_exists(""currentroom""))
+    _tenna_fw_room = global.currentroom;
+var _tenna_fw_plot = -1;
+if (variable_global_exists(""plot""))
+    _tenna_fw_plot = global.plot;
+var _tenna_fw_chapter = -1;
+if (variable_global_exists(""chapter""))
+    _tenna_fw_chapter = global.chapter;
+
+var _tenna_fw_elapsed = (current_time - global._tenna_core_start_time) / 1000;
+var _tenna_fw_file = file_text_open_append(global._tenna_fw_export_filename);
+
+if (_changed_count == 1)
+    scr_tenna_fw_write_row(_tenna_fw_file, ""change"", _index, _old, _value, _tenna_fw_elapsed, _tenna_fw_chapter, _tenna_fw_room, _tenna_fw_plot, _first_changed_index, _bit_width, _first_old_bit_value, _first_new_bit_value);
+else
+    scr_tenna_fw_write_row(_tenna_fw_file, ""change"", _index, _old, _value, _tenna_fw_elapsed, _tenna_fw_chapter, _tenna_fw_room, _tenna_fw_plot, -1, _bit_width, _old_bit_values, _new_bit_values, _changed_indices);
+file_text_close(_tenna_fw_file);
+
+if (_changed_count == 1)
+    scr_tenna_log(""FlagWatcher"", ""["" + string(_index) + "":"" + string(_first_changed_index) + ""w"" + string(_bit_width) + ""]: "" + string(_first_old_bit_value) + "" -> "" + string(_first_new_bit_value) + "" parent="" + string(_old) + "" -> "" + string(_value) + "" room="" + string(_tenna_fw_room) + "" plot="" + string(_tenna_fw_plot));
+else
+    scr_tenna_log(""FlagWatcher"", ""["" + string(_index) + "":arrayw"" + string(_bit_width) + ""]: "" + string(_changed_count) + "" slots changed ("" + _changed_indices + "") parent="" + string(_old) + "" -> "" + string(_value) + "" room="" + string(_tenna_fw_room) + "" plot="" + string(_tenna_fw_plot));
+
+if (instance_exists(obj_time))
+{
+    with (obj_time)
+    {
+        global._tenna_fw_last_flag = _index;
+        for (var _tenna_fw_j = _tenna_fw_max_log - 1; _tenna_fw_j > 0; _tenna_fw_j--)
+        {
+            _tenna_fw_log[_tenna_fw_j] = _tenna_fw_log[_tenna_fw_j - 1];
+            _tenna_fw_alpha[_tenna_fw_j] = _tenna_fw_alpha[_tenna_fw_j - 1];
+        }
+        if (_changed_count == 1)
+            _tenna_fw_log[0] = ""Flag["" + string(_index) + "":"" + string(_first_changed_index) + ""w"" + string(_bit_width) + ""]: "" + string(_first_old_bit_value) + "" -> "" + string(_first_new_bit_value);
+        else
+            _tenna_fw_log[0] = ""Flag["" + string(_index) + "":arrayw"" + string(_bit_width) + ""]: "" + string(_changed_count) + "" slots changed"";
+        _tenna_fw_alpha[0] = 1;
+    }
+}
+return 0;
+";
+importGroup.QueueReplace(flagSetBitmaskArrayCode, flagSetBitmaskArrayBody);
 
 bool flagSetExtUpdated = false;
 List<UndertaleCode> flagSetExtCandidates = new List<UndertaleCode>();
@@ -427,8 +605,9 @@ try
   
 
 
-  // Hook global.flag assignments
+  // Hook fresh flag writes and known old watcher wrapper forms.
   int hookedCount = 0;
+  int targetedRewriteCount = 0;
   int failedCount = 0;
   List<string> errorLog = new List<string>();
 
@@ -443,11 +622,33 @@ try
     if (code.Name.Content == "gml_Object_obj_time_Create_0" || code.Name.Content == "gml_Object_obj_time_Step_1" || code.Name.Content == "gml_Object_obj_time_Draw_64")
       continue;
 
-    if (!WritesFlag(code))
+    bool hasFreshFlagWrite = WritesFlag(code);
+    bool hasKnownRewriteSurface = false;
+    string originalText = "";
+
+    if (!hasFreshFlagWrite && HasKnownFlagWatcherRewriteSurface(code))
+    {
+      originalText = GetDecompiledText(code);
+      hasKnownRewriteSurface =
+        originalText.Contains("scr_set_bitmask_value")
+        || originalText.Contains("scr_flag_set_ext")
+        || (originalText.Contains("global.flag") && originalText.Contains("scr_array_to_bitmask"));
+      if (hasKnownRewriteSurface)
+        targetedRewriteCount++;
+    }
+
+    if (!hasFreshFlagWrite && !hasKnownRewriteSurface)
       continue;
 
-    string originalText = GetDecompiledText(code);
-    if (originalText.Contains("global.flag"))
+    if (originalText == "")
+      originalText = GetDecompiledText(code);
+
+    bool shouldRewrite =
+      originalText.Contains("global.flag")
+      || originalText.Contains("scr_set_bitmask_value")
+      || originalText.Contains("scr_flag_set_ext");
+
+    if (shouldRewrite)
     {
       string modifiedText = HookFlagAssignments(originalText);
       if (modifiedText != originalText)
@@ -488,6 +689,8 @@ try
       msg += "\nBitmask flag helper updated.";
     else
       msg += "\nWarning: scr_flag_set_ext was not found; wrapper bitmask writes may display as raw parent flags.";
+    if (targetedRewriteCount > 0)
+      msg += "\nKnown rewrite surfaces checked: " + targetedRewriteCount + ".";
     if (failedCount > 0)
       msg += "\n\nWarning: " + failedCount + " scripts failed compilation and were skipped.\nDetails written to tenna/flag-watcher-errors.txt";
     ScriptMessage(msg);
@@ -501,6 +704,8 @@ catch (Exception ex)
 string HookFlagAssignments(string codeText)
 {
   codeText = HookExistingBitmaskFlagSetCalls(codeText);
+  codeText = HookFlagSetExtCalls(codeText);
+  Dictionary<string, string[]> arrayBitmaskLocals = FindArrayBitmaskLocals(codeText);
 
   int index = 0;
   while (true)
@@ -616,7 +821,7 @@ string HookFlagAssignments(string codeText)
     string replacement = "";
     if (op == "=")
     {
-      replacement = BuildBitmaskSetReplacement(indexExpr, valueExpr);
+      replacement = BuildPackedSetReplacement(indexExpr, valueExpr, arrayBitmaskLocals);
       if (replacement == "")
         replacement = $"scr_tenna_flag_set({indexExpr}, {valueExpr})";
     }
@@ -655,8 +860,55 @@ string HookFlagAssignments(string codeText)
   return codeText;
 }
 
+string HookFlagSetExtCalls(string codeText)
+{
+  string callName = "scr_flag_set_ext";
+  int index = 0;
+  while (true)
+  {
+    index = FindNextCodeText(codeText, callName + "(", index);
+    if (index < 0)
+      break;
+
+    int prefixStart = Math.Max(0, index - "function ".Length);
+    string prefix = codeText.Substring(prefixStart, index - prefixStart);
+    if (prefix == "function ")
+    {
+      index += callName.Length;
+      continue;
+    }
+
+    int openParen = codeText.IndexOf('(', index + callName.Length);
+    if (openParen < 0)
+      break;
+
+    int closeParen = FindMatchingParen(codeText, openParen);
+    if (closeParen < 0)
+    {
+      index += callName.Length;
+      continue;
+    }
+
+    List<string> args = SplitTopLevelArguments(codeText.Substring(openParen + 1, closeParen - openParen - 1));
+    if (args.Count < 3 || args.Count > 4)
+    {
+      index = closeParen + 1;
+      continue;
+    }
+
+    string widthExpr = args.Count >= 4 ? args[3].Trim() : "1";
+    string replacement = $"scr_tenna_flag_set_bitmask({args[0].Trim()}, {args[1].Trim()}, {args[2].Trim()}, {widthExpr})";
+    int originalLength = closeParen + 1 - index;
+    codeText = codeText.Substring(0, index) + replacement + codeText.Substring(index + originalLength);
+    index += replacement.Length;
+  }
+
+  return codeText;
+}
+
 string HookExistingBitmaskFlagSetCalls(string codeText)
 {
+  Dictionary<string, string[]> arrayBitmaskLocals = FindArrayBitmaskLocals(codeText);
   string callName = "scr_tenna_flag_set";
   int index = 0;
   while (true)
@@ -683,7 +935,7 @@ string HookExistingBitmaskFlagSetCalls(string codeText)
       continue;
     }
 
-    string replacement = BuildBitmaskSetReplacement(args[0].Trim(), args[1].Trim());
+    string replacement = BuildPackedSetReplacement(args[0].Trim(), args[1].Trim(), arrayBitmaskLocals);
     if (replacement == "")
     {
       index = closeParen + 1;
@@ -696,6 +948,28 @@ string HookExistingBitmaskFlagSetCalls(string codeText)
   }
 
   return codeText;
+}
+
+string BuildPackedSetReplacement(string indexExpr, string valueExpr)
+{
+  return BuildPackedSetReplacement(indexExpr, valueExpr, null);
+}
+
+string BuildPackedSetReplacement(string indexExpr, string valueExpr, Dictionary<string, string[]> arrayBitmaskLocals)
+{
+  string replacement = BuildBitmaskSetReplacement(indexExpr, valueExpr);
+  if (replacement != "")
+    return replacement;
+
+  replacement = BuildArrayBitmaskSetReplacement(indexExpr, valueExpr);
+  if (replacement != "")
+    return replacement;
+
+  string localName = valueExpr.Trim();
+  if (arrayBitmaskLocals != null && IsIdentifier(localName) && arrayBitmaskLocals.TryGetValue(localName, out string[] localArgs))
+    return $"scr_tenna_flag_set_bitmask_array({indexExpr}, {localArgs[0]}, {localArgs[1]})";
+
+  return "";
 }
 
 string BuildBitmaskSetReplacement(string indexExpr, string valueExpr)
@@ -725,6 +999,113 @@ string BuildBitmaskSetReplacement(string indexExpr, string valueExpr)
 
   string widthExpr = args.Count >= 4 ? args[3].Trim() : "1";
   return $"scr_tenna_flag_set_bitmask({indexExpr}, {args[1].Trim()}, {args[2].Trim()}, {widthExpr})";
+}
+
+string BuildArrayBitmaskSetReplacement(string indexExpr, string valueExpr)
+{
+  string callName = "scr_array_to_bitmask";
+  string trimmed = valueExpr.Trim();
+  if (!trimmed.StartsWith(callName + "(", StringComparison.Ordinal))
+    return "";
+
+  int openParen = trimmed.IndexOf('(');
+  int closeParen = FindMatchingParen(trimmed, openParen);
+  if (closeParen != trimmed.Length - 1)
+    return "";
+
+  List<string> args = SplitTopLevelArguments(trimmed.Substring(openParen + 1, closeParen - openParen - 1));
+  if (args.Count < 1 || args.Count > 2)
+    return "";
+
+  string widthExpr = args.Count >= 2 ? args[1].Trim() : "1";
+  return $"scr_tenna_flag_set_bitmask_array({indexExpr}, {args[0].Trim()}, {widthExpr})";
+}
+
+Dictionary<string, string[]> FindArrayBitmaskLocals(string codeText)
+{
+  Dictionary<string, string[]> locals = new Dictionary<string, string[]>();
+  string callName = "scr_array_to_bitmask";
+  int index = 0;
+
+  while (true)
+  {
+    index = FindNextCodeText(codeText, callName + "(", index);
+    if (index < 0)
+      break;
+
+    int openParen = codeText.IndexOf('(', index + callName.Length);
+    int closeParen = openParen >= 0 ? FindMatchingParen(codeText, openParen) : -1;
+    if (openParen < 0 || closeParen < 0)
+    {
+      index += callName.Length;
+      continue;
+    }
+
+    int statementStart = index - 1;
+    while (statementStart >= 0)
+    {
+      char c = codeText[statementStart];
+      if (c == ';' || c == '\n' || c == '{' || c == '}')
+      {
+        statementStart++;
+        break;
+      }
+      statementStart--;
+    }
+    if (statementStart < 0)
+      statementStart = 0;
+
+    string assignedName = ExtractAssignedIdentifier(codeText.Substring(statementStart, index - statementStart));
+    if (assignedName == "")
+    {
+      index = closeParen + 1;
+      continue;
+    }
+
+    List<string> args = SplitTopLevelArguments(codeText.Substring(openParen + 1, closeParen - openParen - 1));
+    if (args.Count >= 1 && args.Count <= 2)
+    {
+      string widthExpr = args.Count >= 2 ? args[1].Trim() : "1";
+      locals[assignedName] = new string[] { args[0].Trim(), widthExpr };
+    }
+
+    index = closeParen + 1;
+  }
+
+  return locals;
+}
+
+string ExtractAssignedIdentifier(string prefix)
+{
+  string trimmed = prefix.Trim();
+  if (!trimmed.EndsWith("=", StringComparison.Ordinal))
+    return "";
+
+  trimmed = trimmed.Substring(0, trimmed.Length - 1).Trim();
+  if (trimmed.StartsWith("var ", StringComparison.Ordinal))
+    trimmed = trimmed.Substring(4).Trim();
+
+  if (!IsIdentifier(trimmed))
+    return "";
+
+  return trimmed;
+}
+
+bool IsIdentifier(string value)
+{
+  if (value.Length == 0)
+    return false;
+
+  if (!(char.IsLetter(value[0]) || value[0] == '_'))
+    return false;
+
+  for (int i = 1; i < value.Length; i++)
+  {
+    if (!(char.IsLetterOrDigit(value[i]) || value[i] == '_'))
+      return false;
+  }
+
+  return true;
 }
 
 string ExtractGlobalFlagIndex(string expr)
@@ -1090,4 +1471,66 @@ bool WritesFlag(UndertaleCode code)
       return true;
   }
   return false;
+}
+
+bool HasKnownFlagWatcherRewriteSurface(UndertaleCode code)
+{
+  return ReferencesInstructionText(code, "scr_flag_set_ext")
+    || ReferencesInstructionText(code, "scr_set_bitmask_value")
+    || ReferencesInstructionText(code, "scr_array_to_bitmask");
+}
+
+bool ReferencesInstructionText(UndertaleCode code, string needle)
+{
+  if (code.Instructions == null)
+    return false;
+
+  foreach (var instr in code.Instructions)
+  {
+    if ((instr.ToString() ?? "").Contains(needle))
+      return true;
+
+    foreach (var prop in instr.GetType().GetProperties())
+    {
+      object propValue;
+      try
+      {
+        propValue = prop.GetValue(instr);
+      }
+      catch (Exception)
+      {
+        continue;
+      }
+
+      if (InstructionValueContains(propValue, needle))
+        return true;
+    }
+
+    foreach (var field in instr.GetType().GetFields())
+    {
+      object fieldValue;
+      try
+      {
+        fieldValue = field.GetValue(instr);
+      }
+      catch (Exception)
+      {
+        continue;
+      }
+
+      if (InstructionValueContains(fieldValue, needle))
+        return true;
+    }
+  }
+
+  return false;
+}
+
+bool InstructionValueContains(object value, string needle)
+{
+  if (value == null)
+    return false;
+
+  string text = value.ToString() ?? "";
+  return text.Contains(needle);
 }
